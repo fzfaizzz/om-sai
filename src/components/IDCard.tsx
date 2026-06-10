@@ -13,15 +13,20 @@ export function IDCard({ certificate }: IDCardProps) {
     return `${day}/${month}/${year}`;
   };
 
-  const isExpired = (expiryDate?: string) => {
-    if (!expiryDate) return false;
+  const isExpired = (cert: Certificate) => {
+    if (!cert.expiryDate) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const expiry = new Date(expiryDate);
+    const expiry = new Date(cert.expiryDate);
+    
+    if (cert.formType === 'Form B') {
+      expiry.setMonth(expiry.getMonth() + 6);
+    }
+    
     return expiry < today;
   };
 
-  const expired = isExpired(certificate.expiryDate);
+  const expired = isExpired(certificate);
 
   const getExpiryDisplay = (cert: Certificate) => {
     if (cert.formType === 'Form B' && cert.expiryDate) {
@@ -36,8 +41,8 @@ export function IDCard({ certificate }: IDCardProps) {
   };
 
   const getExpiryLabel = (cert: Certificate) => {
-    if (cert.formType === 'Form B') return 'Validity Period';
-    return 'Expiry date';
+    if (cert.formType === 'Form B') return 'Period';
+    return 'Valid up to';
   };
 
   return (
@@ -109,7 +114,17 @@ export function IDCard({ certificate }: IDCardProps) {
           <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 flex gap-2">
             <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
             <p className="text-[10px] text-blue-700 leading-relaxed font-bold">
-              Note: Please apply for Form B once Form A is expire
+              Note: Please apply for Form B once Form A is expired
+            </p>
+          </div>
+        )}
+
+        {/* Form C Specific Note */}
+        {certificate.formType === 'Form C' && (
+          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 flex gap-2">
+            <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-blue-700 leading-relaxed font-bold">
+              Note: Please apply for certificate renewal 2-3 days prior to expiration.
             </p>
           </div>
         )}
@@ -122,20 +137,7 @@ export function IDCard({ certificate }: IDCardProps) {
           </p>
         </div>
 
-        {/* PDF Download Section */}
-        {certificate.pdfPath && (
-          <div className="pt-2 md:pt-4">
-            <a
-              href={`/${certificate.pdfPath}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 py-3 md:py-4 bg-red-50 hover:bg-red-100 text-[#e31e24] font-bold rounded-xl border border-red-200 transition-all text-xs md:text-sm"
-            >
-              <FileDown className="w-4 h-4 md:w-5 md:h-5" />
-              Download Official Document (PDF)
-            </a>
-          </div>
-        )}
+
 
         {/* Footer Area */}
         <div className="pt-4 border-t border-dashed border-gray-200 text-center">

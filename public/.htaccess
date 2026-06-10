@@ -5,9 +5,7 @@ DirectoryIndex index.html
   RewriteEngine On
   RewriteBase /
 
-  # 1. Force HTTPS
-  RewriteCond %{HTTPS} off
-  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # 1. Force HTTPS (Removed to prevent Sucuri redirect loops)
 
   # 2. Redirect index.html to Root
   RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /index\.html\ HTTP/

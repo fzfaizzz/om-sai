@@ -25,11 +25,19 @@ export default defineConfig(({mode}) => {
           target: 'https://omsaienterprisesmumbai.com',
           changeOrigin: true,
           secure: false,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://omsaienterprisesmumbai.com/'
+          }
         },
         '/uploads': {
           target: 'https://omsaienterprisesmumbai.com',
           changeOrigin: true,
           secure: false,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://omsaienterprisesmumbai.com/'
+          }
         }
       }
     },

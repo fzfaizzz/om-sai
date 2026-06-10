@@ -83,7 +83,7 @@ export function AdminPortal() {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await fetch('./api/audit.php');
+      const res = await fetch(`./api/audit.php?t=${Date.now()}`);
       const data = await res.json();
       if (res.ok) setAuditLogs(data);
     } catch (err) {
@@ -121,16 +121,31 @@ export function AdminPortal() {
 
   const fetchCertificates = async () => {
     try {
-      const res = await fetch('./api/admin.php');
-      const data = await res.json();
+      const res = await fetch(`./api/admin.php?t=${Date.now()}`);
+      
+      if (!res.ok) {
+        let errorMsg = `Server error: ${res.status}`;
+        try {
+          const data = await res.json();
+          errorMsg = data.error || data.message || errorMsg;
+        } catch (_) {
+          const text = await res.text();
+          if (text.includes("Access Denied") || text.includes("Sucuri") || text.includes("Firewall")) {
+            errorMsg = "Access Denied: Blocked by GoDaddy Website Firewall (Sucuri)";
+          }
+        }
+        console.error('API Error:', errorMsg);
+        setCertificates([]);
+        if (isAuthenticated) alert(errorMsg);
+        return;
+      }
 
-      if (res.ok && Array.isArray(data)) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
         setCertificates(data);
       } else {
-        const errorMsg = data.error || data.message || 'Failed to fetch certificates from MySQL';
-        console.error('API Error:', errorMsg);
-        setCertificates([]); // Important: avoid setting non-array state
-        if (isAuthenticated) alert(errorMsg);
+        console.error('API Error: Data is not an array', data);
+        setCertificates([]);
       }
     } catch (err) {
       console.error('Network Error:', err);
@@ -155,8 +170,17 @@ export function AdminPortal() {
         sessionStorage.setItem('adminRole', data.role);
         setLoginError('');
       } else {
-        const data = await res.json();
-        setLoginError(data.message || 'Invalid username or password');
+        let errorMsg = 'Invalid username or password';
+        try {
+          const data = await res.json();
+          errorMsg = data.message || errorMsg;
+        } catch (_) {
+          const text = await res.text();
+          if (text.includes("Access Denied") || text.includes("Sucuri") || text.includes("Firewall")) {
+            errorMsg = "Access Denied: Blocked by GoDaddy Website Firewall (Sucuri)";
+          }
+        }
+        setLoginError(errorMsg);
       }
     } catch (err) {
       setLoginError('Could not connect to authentication server.');
@@ -174,9 +198,9 @@ export function AdminPortal() {
     if (window.confirm('Are you sure you want to delete this certificate?')) {
       try {
         const res = await fetch('./api/admin.php', {
-          method: 'DELETE',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ action: 'DELETE', id })
         });
         if (res.ok) {
           const updated = certificates.filter(c => c.id !== id);
@@ -237,6 +261,7 @@ export function AdminPortal() {
     try {
       const formDataToSend = new FormData();
       Object.keys(formData).forEach(key => {
+        if (key === 'id') return; // Skip id here as it is appended below
         const val = (formData as any)[key];
         if (val !== undefined && val !== null) formDataToSend.append(key, val);
       });
@@ -420,7 +445,11 @@ export function AdminPortal() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const expiry = new Date(c.expiryDate);
-      return matchesSearch && today > expiry;
+      let effectiveExpiry = new Date(expiry);
+      if (c.formType === 'Form B') {
+        effectiveExpiry.setMonth(effectiveExpiry.getMonth() + 6);
+      }
+      return matchesSearch && today > effectiveExpiry;
     }
 
     if (dashboardFilter === 'formA') {
@@ -443,7 +472,11 @@ export function AdminPortal() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const expiry = new Date(c.expiryDate);
-    return today > expiry;
+    let effectiveExpiry = new Date(expiry);
+    if (c.formType === 'Form B') {
+      effectiveExpiry.setMonth(effectiveExpiry.getMonth() + 6);
+    }
+    return today > effectiveExpiry;
   }).length;
   const activeCertificates = certificates.filter(c => c.status === 'Active').length;
   const totalFormA = certificates.filter(c => c.formType === 'Form A').length;
@@ -703,12 +736,16 @@ export function AdminPortal() {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+          <form
+            onSubmit={handleSave}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
+          >
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 shrink-0">
               <h3 className="text-lg font-bold text-gray-900">
                 {editingCertificate ? 'Edit Certificate' : 'Add New Certificate'}
               </h3>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
@@ -717,7 +754,7 @@ export function AdminPortal() {
             </div>
 
             <div className="overflow-y-auto p-4 sm:p-6">
-              <form id="certificate-form" onSubmit={handleSave} className="space-y-4">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Certificate ID</label>
@@ -790,6 +827,7 @@ export function AdminPortal() {
                     <input
                       type="date"
                       value={formData.issueDate || ''}
+                      max={new Date().toISOString().split('T')[0]}
                       onChange={e => {
                         setFormData({ ...formData, issueDate: e.target.value });
                         updateExpiryDate(formData.formType || 'Form C', e.target.value, formBPeriod, formBYear);
@@ -801,7 +839,7 @@ export function AdminPortal() {
                   {formData.formType === 'Form B' && (
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Validity Period</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
                         <select
                           value={formBPeriod}
                           onChange={e => {
@@ -873,7 +911,7 @@ export function AdminPortal() {
                     </div>
                   </div>
                 </div>
-              </form>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0 bg-gray-50">
@@ -886,13 +924,12 @@ export function AdminPortal() {
               </button>
               <button
                 type="submit"
-                form="certificate-form"
                 className="px-4 py-2 text-sm font-medium text-white bg-[#e31e24] hover:bg-red-700 rounded-lg transition-colors"
               >
                 {editingCertificate ? 'Save Changes' : 'Add Certificate'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

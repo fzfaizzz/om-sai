@@ -34,8 +34,13 @@ export function UserPortal() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const expiry = new Date(data.expiryDate);
+          let effectiveExpiry = new Date(expiry);
           
-          if (today > expiry) {
+          if (data.formType === 'Form B') {
+            effectiveExpiry.setMonth(effectiveExpiry.getMonth() + 6);
+          }
+          
+          if (today > effectiveExpiry) {
             setCertificate(null);
             setError('This certificate has expired and not valid. Please contact Om Sai Enterprises admin team.');
           } else {
@@ -52,7 +57,7 @@ export function UserPortal() {
 
     try {
       // Use a cleaner relative path for the API
-      const res = await fetch(`api/check.php?id=${certId.trim().toUpperCase()}`);
+      const res = await fetch(`api/check.php?id=${certId.trim().toUpperCase()}&t=${Date.now()}`);
       
       if (!res.ok) {
         let errorMessage = 'Network response was not ok';

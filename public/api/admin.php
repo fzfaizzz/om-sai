@@ -64,6 +64,37 @@ switch ($method) {
         $input_data = json_decode(file_get_contents("php://input"), true) ?? [];
         $data = (object) array_merge($input_data, $_POST);
 
+        // Check if this is a DELETE request tunnelled through POST
+        if (isset($data->action) && strtoupper($data->action) === 'DELETE') {
+            if (!empty($data->id)) {
+                try {
+                    $stmt = $conn->prepare("DELETE FROM certificates WHERE id = :id");
+                    $stmt->bindParam(':id', $data->id);
+
+                    if ($stmt->execute()) {
+                        // Log Action
+                        $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, 'Admin', :details)");
+                        $logStmt->execute([
+                            ':cert_id' => $data->id,
+                            ':details' => "Certificate ID: " . $data->id . " deleted"
+                        ]);
+
+                        echo json_encode(["message" => "Certificate deleted successfully"]);
+                    } else {
+                        http_response_code(503);
+                        echo json_encode(["error" => "Unable to delete certificate"]);
+                    }
+                } catch (PDOException $e) {
+                    http_response_code(500);
+                    echo json_encode(["error" => "Database error: " . $e->getMessage()]);
+                }
+            } else {
+                http_response_code(400);
+                echo json_encode(["error" => "Incomplete data"]);
+            }
+            break;
+        }
+
         $pdf_file = $_FILES['pdf'] ?? null;
 
         $form_type = strtoupper(trim($data->formType ?? $data->form_type ?? ''));
