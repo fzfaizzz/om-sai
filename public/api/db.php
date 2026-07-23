@@ -18,10 +18,13 @@ $db_name = "omsai_db";
 $username = "e3u1qog8gwl5"; 
 $password = "A65J2@Ort%bb";
 
+date_default_timezone_set('Asia/Kolkata');
+
 try {
     $conn = new PDO("mysql:host=" . $host . ";dbname=" . $db_name, $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $conn->exec("set names utf8");
+    $conn->exec("SET time_zone = '+05:30'");
 } catch(PDOException $exception) {
     http_response_code(500);
     echo json_encode(["error" => "Database Connection Failed: " . $exception->getMessage()]);

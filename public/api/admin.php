@@ -12,6 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 @ini_set('memory_limit', '256M');
 @ini_set('max_execution_time', '120');
+date_default_timezone_set('Asia/Kolkata');
 
 require_once 'db.php';
 
