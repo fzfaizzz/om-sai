@@ -232,28 +232,45 @@ switch ($method) {
         }
 
         $files_to_process = [];
-        if (isset($_FILES['pdfs'])) {
-            if (is_array($_FILES['pdfs']['name'])) {
-                for ($i = 0; $i < count($_FILES['pdfs']['name']); $i++) {
-                    if ($_FILES['pdfs']['error'][$i] === UPLOAD_ERR_OK) {
+        $upload_errors = [];
+
+        if (!empty($_FILES)) {
+            foreach ($_FILES as $key => $file_item) {
+                if (is_array($file_item['name'])) {
+                    for ($i = 0; $i < count($file_item['name']); $i++) {
+                        if ($file_item['error'][$i] === UPLOAD_ERR_OK) {
+                            $files_to_process[] = [
+                                'name' => $file_item['name'][$i],
+                                'tmp_name' => $file_item['tmp_name'][$i]
+                            ];
+                        } else if ($file_item['error'][$i] !== UPLOAD_ERR_NO_FILE) {
+                            $upload_errors[] = "File " . $file_item['name'][$i] . " upload failed (code " . $file_item['error'][$i] . ")";
+                        }
+                    }
+                } else {
+                    if ($file_item['error'] === UPLOAD_ERR_OK) {
                         $files_to_process[] = [
-                            'name' => $_FILES['pdfs']['name'][$i],
-                            'tmp_name' => $_FILES['pdfs']['tmp_name'][$i]
+                            'name' => $file_item['name'],
+                            'tmp_name' => $file_item['tmp_name']
                         ];
+                    } else if ($file_item['error'] !== UPLOAD_ERR_NO_FILE) {
+                        $upload_errors[] = "File " . $file_item['name'] . " upload failed (code " . $file_item['error'] . ")";
                     }
                 }
             }
         }
-        if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
-            $files_to_process[] = $_FILES['pdf'];
-        }
-        for ($k = 0; $k < 3; $k++) {
-            if (isset($_FILES["pdf_$k"]) && $_FILES["pdf_$k"]['error'] === UPLOAD_ERR_OK) {
-                $files_to_process[] = $_FILES["pdf_$k"];
-            }
+
+        if (count($upload_errors) > 0 && count($files_to_process) === 0 && count($existing_pdfs) === 0) {
+            http_response_code(400);
+            echo json_encode(["error" => implode(', ', $upload_errors)]);
+            exit();
         }
 
         $new_pdf_paths = $existing_pdfs;
+        $upload_dir = __DIR__ . '/../uploads/';
+        if (!is_dir($upload_dir)) {
+            @mkdir($upload_dir, 0777, true);
+        }
 
         foreach ($files_to_process as $file_item) {
             if (count($new_pdf_paths) >= 3) break; // Maximum 3 PDFs allowed
@@ -267,10 +284,6 @@ switch ($method) {
                 exit();
             }
 
-            $upload_dir = '../uploads/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
             $clean_cert_id = preg_replace('/[^a-zA-Z0-9]/', '_', $certificate_id);
             $new_filename = 'cert_' . $clean_cert_id . '_' . time() . '_' . rand(100, 999) . '.pdf';
             $dest_path = $upload_dir . $new_filename;
