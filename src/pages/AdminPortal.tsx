@@ -299,16 +299,20 @@ export function AdminPortal() {
       const formDataToSend = new FormData();
       formDataToSend.append('token', token);
 
+      // Skip keys that are handled separately or are non-string types
+      const skipKeys = ['id', 'pdfPath', 'pdfPaths', 'createdAt'];
       Object.keys(formData).forEach(key => {
-        if (key === 'id') return;
+        if (skipKeys.includes(key)) return;
         const val = (formData as any)[key];
-        if (val !== undefined && val !== null) formDataToSend.append(key, val);
+        if (val !== undefined && val !== null && typeof val !== 'object') {
+          formDataToSend.append(key, String(val));
+        }
       });
 
-      // Send retained existing PDF paths
+      // Send retained existing PDF paths as JSON string
       formDataToSend.append('existingPdfPaths', JSON.stringify(existingPdfPaths));
 
-      // Send new PDF files cleanly
+      // Send new PDF files
       selectedFiles.forEach((file) => {
         formDataToSend.append('pdfs[]', file);
       });
@@ -330,12 +334,24 @@ export function AdminPortal() {
         setExistingPdfPaths([]);
         fetchCertificates();
       } else {
-        const errorData = await res.json();
-        alert(`Error: ${errorData.error || errorData.message || 'Unknown server error'}`);
+        let errorMsg = 'Unknown server error';
+        try {
+          const text = await res.text();
+          try {
+            const json = JSON.parse(text);
+            errorMsg = json.error || json.message || text;
+          } catch (_) {
+            errorMsg = text || `Server error: ${res.status}`;
+          }
+        } catch (_) {
+          errorMsg = `Server returned status ${res.status}`;
+        }
+        alert(`Error: ${errorMsg}`);
       }
     } catch (err) {
-      console.error('API save failed', err);
-      alert('Network Error. Could not save to Database.');
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('API save failed:', msg);
+      alert(`Save Failed: ${msg}`);
     }
   };
 
