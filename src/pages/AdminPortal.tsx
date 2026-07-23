@@ -88,11 +88,7 @@ export function AdminPortal() {
   const fetchAuditLogs = async () => {
     try {
       const token = getAuthToken();
-      const res = await fetch(`./api/audit.php?t=${Date.now()}&token=${encodeURIComponent(token)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const res = await fetch(`./api/audit.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (res.ok) setAuditLogs(data);
     } catch (err) {
@@ -131,11 +127,7 @@ export function AdminPortal() {
   const fetchCertificates = async () => {
     try {
       const token = getAuthToken();
-      const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       
       if (!res.ok) {
         let errorMsg = `Server error: ${res.status}`;
@@ -219,10 +211,7 @@ export function AdminPortal() {
         const token = getAuthToken();
         const res = await fetch('./api/admin.php', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'DELETE', id, token })
         });
         if (res.ok) {
@@ -321,9 +310,6 @@ export function AdminPortal() {
 
       const res = await fetch('./api/admin.php', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         body: formDataToSend
       });
 
