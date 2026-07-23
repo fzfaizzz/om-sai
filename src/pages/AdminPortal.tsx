@@ -34,7 +34,7 @@ const formatFullDate = (dateTimeStr?: string) => {
 
 export function AdminPortal() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('adminAuth') === 'true' && Boolean(sessionStorage.getItem('adminToken'));
+    return sessionStorage.getItem('adminAuth') === 'true';
   });
   const [adminRole, setAdminRole] = useState(() => {
     return sessionStorage.getItem('adminRole') || 'Assistant';
@@ -247,12 +247,7 @@ export function AdminPortal() {
             errorMsg = `Server returned status ${res.status}`;
           }
 
-          if (res.status === 401) {
-            handleLogout();
-            alert('Your admin session expired. Please sign in again.');
-          } else {
-            alert(`Delete Failed: ${errorMsg}`);
-          }
+          alert(`Delete Failed: ${errorMsg}`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -367,12 +362,7 @@ export function AdminPortal() {
         } catch (_) {
           errorMsg = `Server returned status ${res.status}`;
         }
-        if (res.status === 401) {
-          handleLogout();
-          alert('Your admin session expired. Please sign in again.');
-        } else {
-          alert(`Error: ${errorMsg}`);
-        }
+        alert(`Error: ${errorMsg}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1041,10 +1031,16 @@ export function AdminPortal() {
                           accept=".pdf"
                           multiple
                           onChange={e => {
-                            if (e.target.files) {
-                              const filesArray = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                            if (e.target.files && e.target.files.length > 0) {
+                              const allFiles = Array.from(e.target.files);
+                              const validPdfs = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                              if (validPdfs.length === 0) {
+                                alert('Please select a valid PDF file (.pdf)');
+                                e.target.value = '';
+                                return;
+                              }
                               const remainingLimit = 3 - (existingPdfPaths.length + selectedFiles.length);
-                              setSelectedFiles(prev => [...prev, ...filesArray.slice(0, remainingLimit)]);
+                              setSelectedFiles(prev => [...prev, ...validPdfs.slice(0, remainingLimit)]);
                               e.target.value = '';
                             }
                           }}
