@@ -295,12 +295,34 @@ export function AdminPortal() {
       });
     }
     setIsModalOpen(true);
+    setIsSaving(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.certificateId || !formData.name || !formData.course || !formData.issueDate || !formData.status) {
-      alert('Please fill all required fields');
+    
+    if (!formData.certificateId?.trim()) {
+      alert('Please enter Certificate ID');
+      return;
+    }
+    if (!formData.companyName?.trim()) {
+      alert('Please enter Company Name');
+      return;
+    }
+    if (!formData.name?.trim()) {
+      alert('Please enter Project Name');
+      return;
+    }
+    if (!formData.course?.trim()) {
+      alert('Please enter Company Address');
+      return;
+    }
+    if (!formData.issueDate?.trim()) {
+      alert('Please select Issue Date');
+      return;
+    }
+    if (!formData.status) {
+      alert('Please select Status');
       return;
     }
 
