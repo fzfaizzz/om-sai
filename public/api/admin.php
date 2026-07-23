@@ -12,7 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once 'db.php';
 
-// --- HMAC AUTHENTICATION CHECK ---
+// Cache raw input once (php://input can only be read once)
+$GLOBALS['_RAW_INPUT'] = file_get_contents("php://input");
+
 function get_auth_token() {
     $headers = null;
     if (isset($_SERVER['Authorization'])) {
@@ -31,7 +33,18 @@ function get_auth_token() {
             return $matches[1];
         }
     }
-    return $_POST['token'] ?? $_GET['token'] ?? null;
+    if (!empty($_POST['token'])) return $_POST['token'];
+    if (!empty($_GET['token'])) return $_GET['token'];
+
+    // Check JSON body (for application/json requests like DELETE)
+    $raw = $GLOBALS['_RAW_INPUT'] ?? '';
+    if (!empty($raw)) {
+        $json = json_decode($raw, true);
+        if (is_array($json) && !empty($json['token'])) {
+            return $json['token'];
+        }
+    }
+    return null;
 }
 
 function verify_admin_token() {
@@ -121,8 +134,8 @@ switch ($method) {
 
     case 'POST':
     case 'PUT':
-        // Add or Update certificate
-        $input_data = json_decode(file_get_contents("php://input"), true) ?? [];
+        // Add or Update certificate - use cached raw input
+        $input_data = json_decode($GLOBALS['_RAW_INPUT'], true) ?? [];
         $data = (object) array_merge($input_data, $_POST);
 
         // Check if this is a DELETE request tunnelled through POST

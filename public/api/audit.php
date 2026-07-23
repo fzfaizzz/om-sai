@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once 'db.php';
+$GLOBALS['_RAW_INPUT'] = file_get_contents("php://input");
 
 function get_auth_token() {
     $headers = null;
@@ -30,7 +31,14 @@ function get_auth_token() {
             return $matches[1];
         }
     }
-    return $_POST['token'] ?? $_GET['token'] ?? null;
+    if (!empty($_POST['token'])) return $_POST['token'];
+    if (!empty($_GET['token'])) return $_GET['token'];
+    $raw = $GLOBALS['_RAW_INPUT'] ?? '';
+    if (!empty($raw)) {
+        $json = json_decode($raw, true);
+        if (is_array($json) && !empty($json['token'])) return $json['token'];
+    }
+    return null;
 }
 
 function verify_admin_token() {
