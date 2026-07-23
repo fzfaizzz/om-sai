@@ -19,7 +19,8 @@ const formatDate = (dateStr?: string) => {
 
 const formatFullDate = (dateTimeStr?: string) => {
   if (!dateTimeStr) return '';
-  const date = new Date(dateTimeStr);
+  const cleanStr = dateTimeStr.includes(' ') ? dateTimeStr.replace(' ', 'T') : dateTimeStr;
+  const date = new Date(cleanStr);
   if (isNaN(date.getTime())) return dateTimeStr;
   return date.toLocaleString('en-IN', {
     day: '2-digit',

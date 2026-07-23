@@ -302,7 +302,8 @@ switch ($method) {
                     exit();
                 }
 
-                $query = "INSERT INTO certificates (form_type, certificate_id, full_name, company_name, course_name, issue_date, validity_start, expiry_date, status, issued_by, pdf_path) VALUES (:form_type, :certificate_id, :full_name, :company_name, :course_name, :issue_date, :validity_start, :expiry_date, :status, :issued_by, :pdf_path)";
+                $created_at_now = date('Y-m-d H:i:s');
+                $query = "INSERT INTO certificates (form_type, certificate_id, full_name, company_name, course_name, issue_date, validity_start, expiry_date, status, issued_by, pdf_path, created_at) VALUES (:form_type, :certificate_id, :full_name, :company_name, :course_name, :issue_date, :validity_start, :expiry_date, :status, :issued_by, :pdf_path, :created_at)";
             } else { // UPDATE
                 if (empty($data->id)) {
                     http_response_code(400);
@@ -329,18 +330,24 @@ switch ($method) {
             $stmt->bindParam(':issued_by', $issued_by);
             $stmt->bindParam(':pdf_path', $pdf_path_db);
 
+            if (!$is_update) {
+                $stmt->bindParam(':created_at', $created_at_now);
+            }
+
             if ($is_update) {
                 $stmt->bindParam(':id', $data->id);
             }
 
             if ($stmt->execute()) {
                 $action = (!$is_update ? 'CREATE' : 'UPDATE');
-                $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES (:action, :cert_id, :by, :details)");
+                $log_time = date('Y-m-d H:i:s');
+                $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details, created_at) VALUES (:action, :cert_id, :by, :details, :created_at)");
                 $logStmt->execute([
                     ':action' => $action,
                     ':cert_id' => $certificate_id,
                     ':by' => $issued_by,
-                    ':details' => "Certificate $certificate_id for $company_name " . (!$is_update ? 'created' : 'updated')
+                    ':details' => "Certificate $certificate_id for $company_name " . (!$is_update ? 'created' : 'updated'),
+                    ':created_at' => $log_time
                 ]);
 
                 http_response_code(!$is_update ? 201 : 200);
