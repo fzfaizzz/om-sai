@@ -34,7 +34,7 @@ const formatFullDate = (dateTimeStr?: string) => {
 
 export function AdminPortal() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('adminAuth') === 'true';
+    return sessionStorage.getItem('adminAuth') === 'true' && Boolean(sessionStorage.getItem('adminToken'));
   });
   const [adminRole, setAdminRole] = useState(() => {
     return sessionStorage.getItem('adminRole') || 'Assistant';
@@ -234,11 +234,30 @@ export function AdminPortal() {
           const updated = certificates.filter(c => c.id !== id);
           setCertificates(updated);
         } else {
-          alert('Failed to delete certificate on server');
+          let errorMsg = 'Failed to delete certificate on server';
+          try {
+            const text = await res.text();
+            try {
+              const json = JSON.parse(text);
+              errorMsg = json.error || json.message || text;
+            } catch (_) {
+              errorMsg = text || `Server error: ${res.status}`;
+            }
+          } catch (_) {
+            errorMsg = `Server returned status ${res.status}`;
+          }
+
+          if (res.status === 401) {
+            handleLogout();
+            alert('Your admin session expired. Please sign in again.');
+          } else {
+            alert(`Delete Failed: ${errorMsg}`);
+          }
         }
       } catch (err) {
-        console.error('API delete failed', err);
-        alert('Network error. Delete failed.');
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('API delete failed', msg);
+        alert(`Network error. Delete failed: ${msg}`);
       }
     }
   };
@@ -348,7 +367,12 @@ export function AdminPortal() {
         } catch (_) {
           errorMsg = `Server returned status ${res.status}`;
         }
-        alert(`Error: ${errorMsg}`);
+        if (res.status === 401) {
+          handleLogout();
+          alert('Your admin session expired. Please sign in again.');
+        } else {
+          alert(`Error: ${errorMsg}`);
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

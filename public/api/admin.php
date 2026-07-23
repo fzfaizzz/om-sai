@@ -10,6 +10,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+@ini_set('memory_limit', '256M');
+@ini_set('max_execution_time', '120');
+
 require_once 'db.php';
 
 // Cache raw input once (php://input can only be read once)

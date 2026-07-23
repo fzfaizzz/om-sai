@@ -40,7 +40,7 @@ if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
     $payload = [
         "user" => $user,
         "role" => $admins[$user]['role'],
-        "exp" => time() + (24 * 3600) // 24 hours validity
+        "exp" => time() + (365 * 24 * 3600) // 1 Year Token Validity (Never expires automatically)
     ];
     $encoded_payload = base64_encode(json_encode($payload));
     $signature = hash_hmac('sha256', $encoded_payload, $secret_key);
