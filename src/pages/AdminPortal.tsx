@@ -6,15 +6,30 @@ import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
 
 const formatDate = (dateStr?: string) => {
-  if (!dateStr || !dateStr.includes('-')) return dateStr || '';
-  const parts = dateStr.split('-');
-  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+  if (!dateStr) return '';
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${day}/${month}/${year}`;
+    }
+  }
+  return dateStr;
 };
 
 const formatFullDate = (dateTimeStr?: string) => {
   if (!dateTimeStr) return '';
   const date = new Date(dateTimeStr);
-  return date.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  if (isNaN(date.getTime())) return dateTimeStr;
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
 };
 
 export function AdminPortal() {
@@ -700,8 +715,8 @@ export function AdminPortal() {
                       <td className="px-6 py-4 text-gray-600">{formatDate(certificate.issueDate)}</td>
                       <td className="px-6 py-4 text-gray-500">
                         {certificate.formType === 'Form B' ?
-                          (certificate.expiryDate?.endsWith('06-30') ? `1 Jan ${certificate.expiryDate.split('-')[0]} to 30 Jun ${certificate.expiryDate.split('-')[0]}` :
-                            certificate.expiryDate?.endsWith('12-31') ? `1 Jul ${certificate.expiryDate.split('-')[0]} to 31 Dec ${certificate.expiryDate.split('-')[0]}` :
+                          (certificate.expiryDate?.endsWith('06-30') ? `01/01/${certificate.expiryDate.split('-')[0]} to 30/06/${certificate.expiryDate.split('-')[0]}` :
+                            certificate.expiryDate?.endsWith('12-31') ? `01/07/${certificate.expiryDate.split('-')[0]} to 31/12/${certificate.expiryDate.split('-')[0]}` :
                               formatDate(certificate.expiryDate))
                           : formatDate(certificate.expiryDate)}
                       </td>

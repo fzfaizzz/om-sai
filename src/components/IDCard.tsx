@@ -8,9 +8,15 @@ interface IDCardProps {
 
 export function IDCard({ certificate }: IDCardProps) {
   const formatDate = (dateStr?: string) => {
-    if (!dateStr || !dateStr.includes('-')) return dateStr;
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}/${year}`;
+    if (!dateStr) return '';
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('T')[0].split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year}`;
+      }
+    }
+    return dateStr;
   };
 
   const isExpired = (cert: Certificate) => {
@@ -32,9 +38,9 @@ export function IDCard({ certificate }: IDCardProps) {
     if (cert.formType === 'Form B' && cert.expiryDate) {
       const year = cert.expiryDate.split('-')[0];
       if (cert.expiryDate.endsWith('-06-30')) {
-        return `Jan - Jun ${year}`;
+        return `01/01/${year} to 30/06/${year}`;
       } else {
-        return `Jul - Dec ${year}`;
+        return `01/07/${year} to 31/12/${year}`;
       }
     }
     return formatDate(cert.expiryDate);
