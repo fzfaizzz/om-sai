@@ -24,7 +24,17 @@ try {
     $certificate = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if ($certificate) {
-        // Map database columns to frontend expected JSON format
+        $rawPdfPath = $certificate['pdf_path'] ?? '';
+        $pdfPaths = [];
+        if (!empty($rawPdfPath)) {
+            $decoded = json_decode($rawPdfPath, true);
+            if (is_array($decoded)) {
+                $pdfPaths = $decoded;
+            } else {
+                $pdfPaths = [$rawPdfPath];
+            }
+        }
+
         echo json_encode([
             "id" => $certificate['id'],
             "certificateId" => $certificate['certificate_id'],
@@ -36,7 +46,8 @@ try {
             "expiryDate" => $certificate['expiry_date'],
             "status" => $certificate['status'],
             "issuedBy" => $certificate['issued_by'] ?? 'Admin',
-            "pdfPath" => $certificate['pdf_path'] ?? ''
+            "pdfPath" => count($pdfPaths) > 0 ? $pdfPaths[0] : '',
+            "pdfPaths" => $pdfPaths
         ]);
     } else {
         echo json_encode(null); // Return null if not found

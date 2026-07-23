@@ -10,5 +10,6 @@ export interface Certificate {
   status: 'Active' | 'Inactive';
   issuedBy?: string;
   pdfPath?: string;
+  pdfPaths?: string[];
   createdAt: string;
 }

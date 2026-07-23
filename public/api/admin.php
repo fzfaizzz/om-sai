@@ -12,6 +12,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once 'db.php';
 
+// --- HMAC AUTHENTICATION CHECK ---
+function get_auth_token() {
+    $headers = null;
+    if (isset($_SERVER['Authorization'])) {
+        $headers = trim($_SERVER["Authorization"]);
+    } else if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $headers = trim($_SERVER["HTTP_AUTHORIZATION"]);
+    } else if (function_exists('apache_request_headers')) {
+        $requestHeaders = apache_request_headers();
+        $requestHeaders = array_combine(array_map('ucwords', array_keys($requestHeaders)), array_values($requestHeaders));
+        if (isset($requestHeaders['Authorization'])) {
+            $headers = trim($requestHeaders['Authorization']);
+        }
+    }
+    if (!empty($headers)) {
+        if (preg_match('/Bearer\s(\S+)/i', $headers, $matches)) {
+            return $matches[1];
+        }
+    }
+    return $_POST['token'] ?? $_GET['token'] ?? null;
+}
+
+function verify_admin_token() {
+    $token = get_auth_token();
+    if (!$token) return false;
+
+    $secret_key = "OmSai#AuthSecret@2026!SecureKey";
+    $parts = explode('.', $token);
+    if (count($parts) !== 2) return false;
+
+    $encoded_payload = $parts[0];
+    $signature = $parts[1];
+
+    $expected_signature = hash_hmac('sha256', $encoded_payload, $secret_key);
+    if (!hash_equals($expected_signature, $signature)) return false;
+
+    $payload = json_decode(base64_decode($encoded_payload), true);
+    if (!$payload || !isset($payload['exp']) || time() > $payload['exp']) {
+        return false;
+    }
+    return $payload;
+}
+
+$authenticated_user = verify_admin_token();
+if (!$authenticated_user) {
+    http_response_code(401);
+    echo json_encode(["error" => "Unauthorized access. Valid admin token required."]);
+    exit();
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
@@ -34,6 +84,17 @@ switch ($method) {
                     }
                 }
 
+                $rawPdfPath = $cert['pdf_path'] ?? '';
+                $pdfPaths = [];
+                if (!empty($rawPdfPath)) {
+                    $decoded = json_decode($rawPdfPath, true);
+                    if (is_array($decoded)) {
+                        $pdfPaths = $decoded;
+                    } else {
+                        $pdfPaths = [$rawPdfPath];
+                    }
+                }
+
                 return [
                     "id" => $cert['id'],
                     "certificateId" => $cert['certificate_id'],
@@ -45,7 +106,8 @@ switch ($method) {
                     "expiryDate" => $expiryDate,
                     "status" => $cert['status'],
                     "issuedBy" => $cert['issued_by'] ?? 'Admin',
-                    "pdfPath" => $cert['pdf_path'] ?? '',
+                    "pdfPath" => count($pdfPaths) > 0 ? $pdfPaths[0] : '',
+                    "pdfPaths" => $pdfPaths,
                     "createdAt" => $cert['created_at']
                 ];
             }, $certificates);
@@ -60,7 +122,6 @@ switch ($method) {
     case 'POST':
     case 'PUT':
         // Add or Update certificate
-        // Get data from either JSON or POST (multipart/form-data)
         $input_data = json_decode(file_get_contents("php://input"), true) ?? [];
         $data = (object) array_merge($input_data, $_POST);
 
@@ -73,9 +134,10 @@ switch ($method) {
 
                     if ($stmt->execute()) {
                         // Log Action
-                        $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, 'Admin', :details)");
+                        $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, :action_by, :details)");
                         $logStmt->execute([
                             ':cert_id' => $data->id,
+                            ':action_by' => $authenticated_user['user'] ?? 'Admin',
                             ':details' => "Certificate ID: " . $data->id . " deleted"
                         ]);
 
@@ -95,8 +157,6 @@ switch ($method) {
             break;
         }
 
-        $pdf_file = $_FILES['pdf'] ?? null;
-
         $form_type = strtoupper(trim($data->formType ?? $data->form_type ?? ''));
         $certificate_id = trim($data->certificateId ?? $data->certificate_id ?? '');
         $full_name = trim($data->name ?? $data->full_name ?? '');
@@ -107,16 +167,11 @@ switch ($method) {
         $frontend_expiry = trim($data->expiryDate ?? $data->expiry_date ?? '');
 
         $missing = [];
-        if (!$form_type)
-            $missing[] = 'formType';
-        if (!$certificate_id)
-            $missing[] = 'certificateId';
-        if (!$full_name)
-            $missing[] = 'name';
-        if (!$course_name)
-            $missing[] = 'course';
-        if (!$issue_date)
-            $missing[] = 'issueDate';
+        if (!$form_type) $missing[] = 'formType';
+        if (!$certificate_id) $missing[] = 'certificateId';
+        if (!$full_name) $missing[] = 'name';
+        if (!$course_name) $missing[] = 'course';
+        if (!$issue_date) $missing[] = 'issueDate';
 
         if (count($missing) > 0) {
             http_response_code(400);
@@ -126,7 +181,7 @@ switch ($method) {
 
         $issue_time = strtotime($issue_date);
         $year = (int) date('Y', $issue_time);
-        $issued_by = trim($data->issuedBy ?? $data->issued_by ?? 'Admin');
+        $issued_by = trim($data->issuedBy ?? $data->issued_by ?? $authenticated_user['role'] ?? 'Admin');
 
         $validity_start = null;
         $expiry_date = null;
@@ -161,21 +216,72 @@ switch ($method) {
             $expiry_date = date('Y-m-d', strtotime('+365 days', $issue_time));
         }
 
-        // Handle PDF Upload
-        $pdf_path = trim($data->pdfPath ?? $data->pdf_path ?? '');
-        if ($pdf_file && $pdf_file['error'] === UPLOAD_ERR_OK) {
+        // --- MULTIPLE PDF HANDLING & RETENTION/REMOVAL ---
+        $existing_pdfs = [];
+        if (isset($data->existingPdfPaths)) {
+            if (is_array($data->existingPdfPaths)) {
+                $existing_pdfs = $data->existingPdfPaths;
+            } else if (is_string($data->existingPdfPaths)) {
+                $decoded = json_decode($data->existingPdfPaths, true);
+                if (is_array($decoded)) {
+                    $existing_pdfs = $decoded;
+                } else if (!empty($data->existingPdfPaths)) {
+                    $existing_pdfs = array_map('trim', explode(',', $data->existingPdfPaths));
+                }
+            }
+        }
+
+        $files_to_process = [];
+        if (isset($_FILES['pdfs'])) {
+            if (is_array($_FILES['pdfs']['name'])) {
+                for ($i = 0; $i < count($_FILES['pdfs']['name']); $i++) {
+                    if ($_FILES['pdfs']['error'][$i] === UPLOAD_ERR_OK) {
+                        $files_to_process[] = [
+                            'name' => $_FILES['pdfs']['name'][$i],
+                            'tmp_name' => $_FILES['pdfs']['tmp_name'][$i]
+                        ];
+                    }
+                }
+            }
+        }
+        if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
+            $files_to_process[] = $_FILES['pdf'];
+        }
+        for ($k = 0; $k < 3; $k++) {
+            if (isset($_FILES["pdf_$k"]) && $_FILES["pdf_$k"]['error'] === UPLOAD_ERR_OK) {
+                $files_to_process[] = $_FILES["pdf_$k"];
+            }
+        }
+
+        $new_pdf_paths = $existing_pdfs;
+
+        foreach ($files_to_process as $file_item) {
+            if (count($new_pdf_paths) >= 3) break; // Maximum 3 PDFs allowed
+
+            $file_ext = strtolower(pathinfo($file_item['name'], PATHINFO_EXTENSION));
+
+            // STRICT PDF FILE VALIDATION FOR SECURITY (No PHP scripts allowed)
+            if ($file_ext !== 'pdf') {
+                http_response_code(400);
+                echo json_encode(["error" => "Security Violation: Only PDF files (.pdf) are allowed."]);
+                exit();
+            }
+
             $upload_dir = '../uploads/';
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0777, true);
             }
-            $file_ext = pathinfo($pdf_file['name'], PATHINFO_EXTENSION);
-            $new_filename = 'cert_' . preg_replace('/[^a-zA-Z0-9]/', '_', $certificate_id) . '_' . time() . '.' . $file_ext;
+            $clean_cert_id = preg_replace('/[^a-zA-Z0-9]/', '_', $certificate_id);
+            $new_filename = 'cert_' . $clean_cert_id . '_' . time() . '_' . rand(100, 999) . '.pdf';
             $dest_path = $upload_dir . $new_filename;
 
-            if (move_uploaded_file($pdf_file['tmp_name'], $dest_path)) {
-                $pdf_path = 'uploads/' . $new_filename;
+            if (move_uploaded_file($file_item['tmp_name'], $dest_path)) {
+                $new_pdf_paths[] = 'uploads/' . $new_filename;
             }
         }
+
+        $final_pdf_paths = array_values(array_unique($new_pdf_paths));
+        $pdf_path_db = json_encode($final_pdf_paths);
 
         try {
             $is_update = !empty($data->id);
@@ -215,14 +321,13 @@ switch ($method) {
             }
             $stmt->bindParam(':status', $status);
             $stmt->bindParam(':issued_by', $issued_by);
-            $stmt->bindParam(':pdf_path', $pdf_path);
+            $stmt->bindParam(':pdf_path', $pdf_path_db);
 
             if ($is_update) {
                 $stmt->bindParam(':id', $data->id);
             }
 
             if ($stmt->execute()) {
-                // Log Action
                 $action = (!$is_update ? 'CREATE' : 'UPDATE');
                 $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES (:action, :cert_id, :by, :details)");
                 $logStmt->execute([
@@ -253,10 +358,10 @@ switch ($method) {
                 $stmt->bindParam(':id', $data->id);
 
                 if ($stmt->execute()) {
-                    // Log Action
-                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, 'Admin', :details)");
+                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, :action_by, :details)");
                     $logStmt->execute([
                         ':cert_id' => $data->id,
+                        ':action_by' => $authenticated_user['user'] ?? 'Admin',
                         ':details' => "Certificate ID: " . $data->id . " deleted"
                     ]);
 

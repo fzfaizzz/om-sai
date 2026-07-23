@@ -28,7 +28,6 @@ export function AdminPortal() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const customLogo = localStorage.getItem('customLogo');
 
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,18 +41,23 @@ export function AdminPortal() {
   const [formBPeriod, setFormBPeriod] = useState<'Jan-Jun' | 'Jul-Dec'>('Jan-Jun');
   const [formBYear, setFormBYear] = useState<number>(new Date().getFullYear());
 
+  // PDF Multi-file and Removal state
+  const [existingPdfPaths, setExistingPdfPaths] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
   // Pagination & Audit state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [auditStartDate, setAuditStartDate] = useState('');
   const [auditEndDate, setAuditEndDate] = useState('');
 
   const tableRef = useRef<HTMLTableElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
+
+  const getAuthToken = () => sessionStorage.getItem('adminToken') || '';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -83,7 +87,12 @@ export function AdminPortal() {
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await fetch(`./api/audit.php?t=${Date.now()}`);
+      const token = getAuthToken();
+      const res = await fetch(`./api/audit.php?t=${Date.now()}&token=${encodeURIComponent(token)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
       if (res.ok) setAuditLogs(data);
     } catch (err) {
@@ -98,7 +107,7 @@ export function AdminPortal() {
     let newExpiry = '';
 
     if (type === 'Form A') {
-      newExpiry = `${issueYear}-12-31`; // Expire at end of year as requested
+      newExpiry = `${issueYear}-12-31`;
     } else if (type === 'Form B') {
       if (period === 'Jan-Jun') {
         newExpiry = `${year}-06-30`;
@@ -121,7 +130,12 @@ export function AdminPortal() {
 
   const fetchCertificates = async () => {
     try {
-      const res = await fetch(`./api/admin.php?t=${Date.now()}`);
+      const token = getAuthToken();
+      const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       
       if (!res.ok) {
         let errorMsg = `Server error: ${res.status}`;
@@ -168,6 +182,9 @@ export function AdminPortal() {
         setAdminRole(data.role);
         sessionStorage.setItem('adminAuth', 'true');
         sessionStorage.setItem('adminRole', data.role);
+        if (data.token) {
+          sessionStorage.setItem('adminToken', data.token);
+        }
         setLoginError('');
       } else {
         let errorMsg = 'Invalid username or password';
@@ -190,6 +207,8 @@ export function AdminPortal() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('adminAuth');
+    sessionStorage.removeItem('adminRole');
+    sessionStorage.removeItem('adminToken');
     setUsername('');
     setPassword('');
   };
@@ -197,10 +216,14 @@ export function AdminPortal() {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this certificate?')) {
       try {
+        const token = getAuthToken();
         const res = await fetch('./api/admin.php', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'DELETE', id })
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ action: 'DELETE', id, token })
         });
         if (res.ok) {
           const updated = certificates.filter(c => c.id !== id);
@@ -219,6 +242,14 @@ export function AdminPortal() {
     if (certificate) {
       setEditingCertificate(certificate);
       setFormData(certificate);
+
+      // Load existing PDFs
+      const paths = certificate.pdfPaths && certificate.pdfPaths.length > 0
+        ? certificate.pdfPaths
+        : (certificate.pdfPath ? [certificate.pdfPath] : []);
+      setExistingPdfPaths(paths);
+      setSelectedFiles([]);
+
       if (certificate.formType === 'Form B') {
         const year = parseInt(certificate.expiryDate.split('-')[0], 10);
         setFormBYear(year || new Date().getFullYear());
@@ -232,6 +263,8 @@ export function AdminPortal() {
       const nextYearStr = new Date(new Date().setFullYear(today.getFullYear() + 1)).toISOString().split('T')[0];
       setFormBPeriod('Jan-Jun');
       setFormBYear(today.getFullYear());
+      setExistingPdfPaths([]);
+      setSelectedFiles([]);
       setFormData({
         certificateId: '',
         name: '',
@@ -243,7 +276,6 @@ export function AdminPortal() {
       });
     }
     setIsModalOpen(true);
-    setSelectedFile(null);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -259,16 +291,23 @@ export function AdminPortal() {
     }
 
     try {
+      const token = getAuthToken();
       const formDataToSend = new FormData();
+      formDataToSend.append('token', token);
+
       Object.keys(formData).forEach(key => {
-        if (key === 'id') return; // Skip id here as it is appended below
+        if (key === 'id') return;
         const val = (formData as any)[key];
         if (val !== undefined && val !== null) formDataToSend.append(key, val);
       });
 
-      if (selectedFile) {
-        formDataToSend.append('pdf', selectedFile);
-      }
+      // Send retained existing PDF paths
+      formDataToSend.append('existingPdfPaths', JSON.stringify(existingPdfPaths));
+
+      // Send new PDF files
+      selectedFiles.forEach((file, idx) => {
+        formDataToSend.append(`pdf_${idx}`, file);
+      });
 
       if (editingCertificate) {
         formDataToSend.append('id', editingCertificate.id);
@@ -277,13 +316,17 @@ export function AdminPortal() {
       }
 
       const res = await fetch('./api/admin.php', {
-        method: editingCertificate ? 'POST' : 'POST', // Using POST for both since we need multipart
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formDataToSend
       });
 
       if (res.ok) {
         setIsModalOpen(false);
-        setSelectedFile(null);
+        setSelectedFiles([]);
+        setExistingPdfPaths([]);
         fetchCertificates();
       } else {
         const errorData = await res.json();
@@ -306,10 +349,10 @@ export function AdminPortal() {
       headers.join(','),
       ...certificates.map(c => [
         c.id,
-        `"${c.certificateId}"`,
-        `"${c.name}"`,
-        `"${c.course}"`,
-        `"${c.formType || 'Form C'}"`,
+        `"${(c.certificateId || '').replace(/"/g, '""')}"`,
+        `"${(c.name || '').replace(/"/g, '""')}"`,
+        `"${(c.course || '').replace(/"/g, '""')}"`,
+        `"${(c.formType || 'Form C').replace(/"/g, '""')}"`,
         `"${formatDate(c.issueDate)}"`,
         `"${formatDate(c.expiryDate)}"`,
         `"${c.status}"`
@@ -486,6 +529,11 @@ export function AdminPortal() {
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
   const currentItems = filteredCertificates.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const getPdfCount = (c: Certificate) => {
+    if (c.pdfPaths && c.pdfPaths.length > 0) return c.pdfPaths.length;
+    return c.pdfPath ? 1 : 0;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header isAdminMode={true} onLogout={handleLogout} showAdminLink={false} />
@@ -626,7 +674,7 @@ export function AdminPortal() {
             <div>
               <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">All PDFs</p>
               <p className="text-lg sm:text-xl font-bold text-gray-900">
-                {certificates.filter(c => c.pdfPath).length}
+                {certificates.filter(c => getPdfCount(c) > 0).length}
               </p>
             </div>
           </div>
@@ -733,7 +781,7 @@ export function AdminPortal() {
       </main>
       <Footer />
 
-      {/* Modal */}
+      {/* Certificate Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <form
@@ -889,26 +937,83 @@ export function AdminPortal() {
                       <option value="Inactive">Inactive</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PDF Document <span className="text-gray-400 font-normal italic text-xs">(Optional)</span></label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={e => setSelectedFile(e.target.files?.[0] || null)}
-                        className="hidden"
-                        id="pdf-upload"
-                      />
-                      <label
-                        htmlFor="pdf-upload"
-                        className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors text-sm"
-                      >
-                        <FileUp className="w-4 h-4 text-gray-400" />
-                        <span className="truncate max-w-[150px]">
-                          {selectedFile ? selectedFile.name : (formData.pdfPath ? 'Change PDF' : 'Upload PDF')}
-                        </span>
-                      </label>
-                    </div>
+
+                  {/* Multi-PDF Upload & Removal Section */}
+                  <div className="sm:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                    <label className="block text-sm font-semibold text-gray-800 mb-2">
+                      PDF Documents <span className="text-gray-400 font-normal italic text-xs">(Optional - Up to 3 PDFs)</span>
+                    </label>
+
+                    {/* Already Uploaded PDFs */}
+                    {existingPdfPaths.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Uploaded Documents ({existingPdfPaths.length}):</p>
+                        {existingPdfPaths.map((path, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-blue-50/70 px-3 py-2 rounded-lg border border-blue-100 text-xs">
+                            <a href={`/${path}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 font-bold hover:underline truncate max-w-[280px]">
+                              📄 PDF {idx + 1} ({path.split('/').pop()})
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => setExistingPdfPaths(existingPdfPaths.filter((_, i) => i !== idx))}
+                              className="text-red-600 hover:text-red-800 font-bold px-2 py-1 rounded hover:bg-red-100 text-xs transition-colors flex items-center gap-1"
+                              title="Remove this PDF"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Newly Selected Local Files */}
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">New Files to Upload ({selectedFiles.length}):</p>
+                        {selectedFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-green-50/70 px-3 py-2 rounded-lg border border-green-100 text-xs">
+                            <span className="text-green-800 font-bold truncate max-w-[280px]">📎 {file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFiles(selectedFiles.filter((_, i) => i !== idx))}
+                              className="text-red-600 hover:text-red-800 font-bold px-2 py-1 rounded hover:bg-red-100 text-xs transition-colors flex items-center gap-1"
+                              title="Remove file"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* File Picker input if < 3 total files */}
+                    {existingPdfPaths.length + selectedFiles.length < 3 && (
+                      <div className="relative mt-2">
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          multiple
+                          onChange={e => {
+                            if (e.target.files) {
+                              const filesArray = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                              const remainingLimit = 3 - (existingPdfPaths.length + selectedFiles.length);
+                              setSelectedFiles([...selectedFiles, ...filesArray.slice(0, remainingLimit)]);
+                            }
+                          }}
+                          className="hidden"
+                          id="pdf-upload"
+                        />
+                        <label
+                          htmlFor="pdf-upload"
+                          className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 hover:border-[#e31e24] rounded-xl hover:bg-gray-50 cursor-pointer transition-all text-sm font-medium text-gray-600"
+                        >
+                          <FileUp className="w-4 h-4 text-gray-500" />
+                          <span>Upload PDF Document ({existingPdfPaths.length + selectedFiles.length}/3)</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -990,27 +1095,15 @@ export function AdminPortal() {
                   Clear Range
                 </button>
               )}
-              <div className="ml-auto text-[10px] font-bold text-gray-400 uppercase">
-                Showing: {
-                  auditStartDate || auditEndDate
-                    ? auditLogs.filter(log => {
-                      const d = new Date(log.created_at); d.setHours(0, 0, 0, 0);
-                      const s = auditStartDate ? new Date(auditStartDate) : null; if (s) s.setHours(0, 0, 0, 0);
-                      const e = auditEndDate ? new Date(auditEndDate) : null; if (e) e.setHours(0, 0, 0, 0);
-                      return (!s || d >= s) && (!e || d <= e);
-                    }).length
-                    : auditLogs.length
-                } Logs
-              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200  top-0 z-10">
+                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3">Time</th>
+                    <th className="px-4 py-3">Timestamp</th>
                     <th className="px-4 py-3">Action</th>
-                    <th className="px-4 py-3">Target ID</th>
+                    <th className="px-4 py-3">Cert ID</th>
                     <th className="px-4 py-3">By</th>
                     <th className="px-4 py-3">Details</th>
                   </tr>
@@ -1018,60 +1111,46 @@ export function AdminPortal() {
                 <tbody className="divide-y divide-gray-100">
                   {auditLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500 italic">No logs found.</td>
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500 italic">No audit logs found.</td>
                     </tr>
                   ) : (
-                    auditLogs
-                      .filter(log => {
-                        const d = new Date(log.created_at); d.setHours(0, 0, 0, 0);
-                        const s = auditStartDate ? new Date(auditStartDate) : null; if (s) s.setHours(0, 0, 0, 0);
-                        const e = auditEndDate ? new Date(auditEndDate) : null; if (e) e.setHours(0, 0, 0, 0);
-                        return (!s || d >= s) && (!e || d <= e);
-                      })
-                      .map(log => (
-                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-500 text-xs">{formatFullDate(log.created_at)}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
-                              log.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>
-                              {log.action}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-medium text-gray-900">{log.certificate_id}</td>
-                          <td className="px-4 py-3 text-gray-600">{log.action_by}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs italic">{log.details}</td>
-                        </tr>
-                      ))
+                    auditLogs.map((log, idx) => (
+                      <tr key={log.id || idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-gray-500 text-xs">{formatFullDate(log.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
+                            log.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{log.certificate_id}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs italic">{log.action_by}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-[300px]" title={log.details}>{log.details}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
-
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50">
-              <button
-                onClick={() => setIsAuditModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}
-      {/* PDF Repository Modal */}
+
+      {/* All PDFs Modal */}
       {isPdfModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden h-[80vh] flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50/50">
               <div className="flex items-center gap-3">
-                <FileDown className="w-5 h-5 text-red-600" />
-                <h3 className="text-lg font-bold text-gray-900">Certificate PDF Repository</h3>
+                <FileDown className="w-5 h-5 text-[#e31e24]" />
+                <h3 className="text-lg font-bold text-gray-900">Certificate PDF Documents Repository</h3>
               </div>
               <button
                 onClick={() => setIsPdfModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1084,33 +1163,39 @@ export function AdminPortal() {
                     <th className="px-4 py-3">Cert ID</th>
                     <th className="px-4 py-3">Project Name</th>
                     <th className="px-4 py-3">Issue Date</th>
-                    <th className="px-4 py-3 text-right">Action</th>
+                    <th className="px-4 py-3 text-right">PDF Documents</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {certificates.filter(c => c.pdfPath).length === 0 ? (
+                  {certificates.filter(c => getPdfCount(c) > 0).length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-4 py-8 text-center text-gray-500 italic">No PDF documents found.</td>
                     </tr>
                   ) : (
-                    certificates.filter(c => c.pdfPath).map(cert => (
-                      <tr key={cert.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-gray-600 font-medium">{cert.certificateId}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">{cert.name}</td>
-                        <td className="px-4 py-3 text-gray-500">{formatDate(cert.issueDate)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <a
-                            href={`/${cert.pdfPath}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View PDF
-                          </a>
-                        </td>
-                      </tr>
-                    ))
+                    certificates.filter(c => getPdfCount(c) > 0).map(cert => {
+                      const paths = cert.pdfPaths && cert.pdfPaths.length > 0 ? cert.pdfPaths : (cert.pdfPath ? [cert.pdfPath] : []);
+                      return (
+                        <tr key={cert.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-gray-600 font-medium">{cert.certificateId}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">{cert.name}</td>
+                          <td className="px-4 py-3 text-gray-500">{formatDate(cert.issueDate)}</td>
+                          <td className="px-4 py-3 text-right flex flex-wrap justify-end gap-2">
+                            {paths.map((p, pIdx) => (
+                              <a
+                                key={pIdx}
+                                href={`/${p}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                PDF {pIdx + 1}
+                              </a>
+                            ))}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
