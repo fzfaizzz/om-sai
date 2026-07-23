@@ -293,14 +293,10 @@ export function AdminPortal() {
       // Send retained existing PDF paths
       formDataToSend.append('existingPdfPaths', JSON.stringify(existingPdfPaths));
 
-      // Send new PDF files using multiple key options for 100% PHP compatibility
-      selectedFiles.forEach((file, idx) => {
-        formDataToSend.append(`pdf_${idx}`, file);
+      // Send new PDF files cleanly
+      selectedFiles.forEach((file) => {
         formDataToSend.append('pdfs[]', file);
       });
-      if (selectedFiles.length > 0) {
-        formDataToSend.append('pdf', selectedFiles[0]);
-      }
 
       if (editingCertificate) {
         formDataToSend.append('id', editingCertificate.id);

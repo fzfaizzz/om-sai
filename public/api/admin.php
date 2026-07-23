@@ -238,22 +238,22 @@ switch ($method) {
             foreach ($_FILES as $key => $file_item) {
                 if (is_array($file_item['name'])) {
                     for ($i = 0; $i < count($file_item['name']); $i++) {
-                        if ($file_item['error'][$i] === UPLOAD_ERR_OK) {
+                        if ($file_item['error'][$i] === UPLOAD_ERR_OK && is_uploaded_file($file_item['tmp_name'][$i])) {
                             $files_to_process[] = [
                                 'name' => $file_item['name'][$i],
                                 'tmp_name' => $file_item['tmp_name'][$i]
                             ];
-                        } else if ($file_item['error'][$i] !== UPLOAD_ERR_NO_FILE) {
+                        } else if ($file_item['error'][$i] !== UPLOAD_ERR_NO_FILE && $file_item['error'][$i] !== UPLOAD_ERR_OK) {
                             $upload_errors[] = "File " . $file_item['name'][$i] . " upload failed (code " . $file_item['error'][$i] . ")";
                         }
                     }
                 } else {
-                    if ($file_item['error'] === UPLOAD_ERR_OK) {
+                    if ($file_item['error'] === UPLOAD_ERR_OK && is_uploaded_file($file_item['tmp_name'])) {
                         $files_to_process[] = [
                             'name' => $file_item['name'],
                             'tmp_name' => $file_item['tmp_name']
                         ];
-                    } else if ($file_item['error'] !== UPLOAD_ERR_NO_FILE) {
+                    } else if ($file_item['error'] !== UPLOAD_ERR_NO_FILE && $file_item['error'] !== UPLOAD_ERR_OK) {
                         $upload_errors[] = "File " . $file_item['name'] . " upload failed (code " . $file_item['error'] . ")";
                     }
                 }
