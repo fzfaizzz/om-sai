@@ -59,6 +59,7 @@ export function AdminPortal() {
   // PDF Multi-file and Removal state
   const [existingPdfPaths, setExistingPdfPaths] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Pagination & Audit state
   const [currentPage, setCurrentPage] = useState(1);
@@ -294,6 +295,7 @@ export function AdminPortal() {
       return;
     }
 
+    setIsSaving(true);
     try {
       const token = getAuthToken();
       const formDataToSend = new FormData();
@@ -352,6 +354,8 @@ export function AdminPortal() {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('API save failed:', msg);
       alert(`Save Failed: ${msg}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1047,9 +1051,10 @@ export function AdminPortal() {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-[#e31e24] hover:bg-red-700 rounded-lg transition-colors"
+                disabled={isSaving}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${isSaving ? 'bg-gray-400 cursor-wait' : 'bg-[#e31e24] hover:bg-red-700'}`}
               >
-                {editingCertificate ? 'Save Changes' : 'Add Certificate'}
+                {isSaving ? 'Saving...' : (editingCertificate ? 'Save Changes' : 'Add Certificate')}
               </button>
             </div>
           </form>

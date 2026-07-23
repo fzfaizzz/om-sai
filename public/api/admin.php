@@ -272,20 +272,22 @@ switch ($method) {
             @mkdir($upload_dir, 0777, true);
         }
 
+        $file_counter = 0;
         foreach ($files_to_process as $file_item) {
-            if (count($new_pdf_paths) >= 3) break; // Maximum 3 PDFs allowed
+            if (count($new_pdf_paths) >= 3) break;
 
             $file_ext = strtolower(pathinfo($file_item['name'], PATHINFO_EXTENSION));
 
-            // STRICT PDF FILE VALIDATION FOR SECURITY (No PHP scripts allowed)
             if ($file_ext !== 'pdf') {
                 http_response_code(400);
                 echo json_encode(["error" => "Security Violation: Only PDF files (.pdf) are allowed."]);
                 exit();
             }
 
-            $clean_cert_id = preg_replace('/[^a-zA-Z0-9]/', '_', $certificate_id);
-            $new_filename = 'cert_' . $clean_cert_id . '_' . time() . '_' . rand(100, 999) . '.pdf';
+            $short_id = substr(preg_replace('/[^a-zA-Z0-9]/', '', $certificate_id), 0, 15);
+            $unique = substr(uniqid('', true), -8);
+            $new_filename = $short_id . '_' . $file_counter . '_' . $unique . '.pdf';
+            $file_counter++;
             $dest_path = $upload_dir . $new_filename;
 
             if (move_uploaded_file($file_item['tmp_name'], $dest_path)) {
@@ -293,7 +295,7 @@ switch ($method) {
             }
         }
 
-        $final_pdf_paths = array_values(array_unique($new_pdf_paths));
+        $final_pdf_paths = array_values($new_pdf_paths);
         $pdf_path_db = json_encode($final_pdf_paths);
 
         try {
