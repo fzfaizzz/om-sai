@@ -363,19 +363,29 @@ switch ($method) {
         break;
 
     case 'DELETE':
-        $data = json_decode(file_get_contents("php://input"));
+        $data = json_decode($GLOBALS['_RAW_INPUT']);
 
         if (!empty($data->id)) {
             try {
+                // Fetch actual certificate_id BEFORE deleting (for proper audit log)
+                $lookupStmt = $conn->prepare("SELECT certificate_id, company_name FROM certificates WHERE id = :id");
+                $lookupStmt->bindParam(':id', $data->id);
+                $lookupStmt->execute();
+                $certRow = $lookupStmt->fetch(PDO::FETCH_ASSOC);
+                $actual_cert_id = $certRow ? $certRow['certificate_id'] : $data->id;
+                $company = $certRow ? $certRow['company_name'] : 'Unknown';
+
                 $stmt = $conn->prepare("DELETE FROM certificates WHERE id = :id");
                 $stmt->bindParam(':id', $data->id);
 
                 if ($stmt->execute()) {
-                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details) VALUES ('DELETE', :cert_id, :action_by, :details)");
+                    $log_time = date('Y-m-d H:i:s');
+                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details, created_at) VALUES ('DELETE', :cert_id, :action_by, :details, :created_at)");
                     $logStmt->execute([
-                        ':cert_id' => $data->id,
+                        ':cert_id' => $actual_cert_id,
                         ':action_by' => $authenticated_user['user'] ?? 'Admin',
-                        ':details' => "Certificate ID: " . $data->id . " deleted"
+                        ':details' => "Certificate $actual_cert_id for $company deleted",
+                        ':created_at' => $log_time
                     ]);
 
                     echo json_encode(["message" => "Certificate deleted successfully"]);
