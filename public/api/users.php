@@ -35,10 +35,8 @@ function ensure_users_table($conn) {
             $now = date('Y-m-d H:i:s');
             $seedStmt = $conn->prepare("INSERT INTO users (username, password, role, created_at) VALUES (:u, :p, :r, :c)");
             
-            // Seed oseadmin
+            // Seed initial primary Admin only
             $seedStmt->execute([':u' => 'oseadmin', ':p' => 'oseadmin@1122', ':r' => 'Admin', ':c' => $now]);
-            // Seed oseassistant
-            $seedStmt->execute([':u' => 'oseassistant', ':p' => 'oseassistant@1122', ':r' => 'Assistant', ':c' => $now]);
         }
     } catch (Exception $e) {
         // Table creation error handled gracefully
@@ -108,37 +106,59 @@ switch ($method) {
                 echo json_encode(["error" => "Database error: " . $e->getMessage()]);
             }
 
-        } elseif ($action === 'UPDATE_PASSWORD') {
-            $username = trim($data->username ?? '');
+        } elseif ($action === 'UPDATE_PASSWORD' || $action === 'UPDATE_USER') {
+            $current_username = trim($data->username ?? '');
+            $new_username = trim($data->newUsername ?? $current_username);
             $new_password = trim($data->newPassword ?? $data->password ?? '');
 
-            if (empty($username) || empty($new_password)) {
+            if (empty($current_username) || (empty($new_password) && empty($new_username))) {
                 http_response_code(400);
-                echo json_encode(["error" => "Username and new password are required"]);
+                echo json_encode(["error" => "Target username and new credentials are required"]);
                 exit;
             }
 
             try {
-                $stmt = $conn->prepare("UPDATE users SET password = :p WHERE username = :u");
-                if ($stmt->execute([':p' => $new_password, ':u' => $username])) {
-                    if ($stmt->rowCount() === 0) {
+                // If changing username, check if new_username already exists
+                if ($new_username !== $current_username) {
+                    $check = $conn->prepare("SELECT id FROM users WHERE username = :u AND username != :curr");
+                    $check->execute([':u' => $new_username, ':curr' => $current_username]);
+                    if ($check->rowCount() > 0) {
+                        http_response_code(409);
+                        echo json_encode(["error" => "Username '$new_username' is already taken"]);
+                        exit;
+                    }
+                }
+
+                if (!empty($new_password)) {
+                    $stmt = $conn->prepare("UPDATE users SET username = :new_u, password = :p WHERE username = :curr_u");
+                    $success = $stmt->execute([':new_u' => $new_username, ':p' => $new_password, ':curr_u' => $current_username]);
+                } else {
+                    $stmt = $conn->prepare("UPDATE users SET username = :new_u WHERE username = :curr_u");
+                    $success = $stmt->execute([':new_u' => $new_username, ':curr_u' => $current_username]);
+                }
+
+                if ($success) {
+                    if ($stmt->rowCount() === 0 && $new_username === $current_username) {
                         http_response_code(404);
                         echo json_encode(["error" => "User not found"]);
                         exit;
                     }
                     $now = date('Y-m-d H:i:s');
-                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details, created_at) VALUES ('CHANGE_PASSWORD', :cert_id, :by, :details, :c)");
+                    $logStmt = $conn->prepare("INSERT INTO audit_logs (action, certificate_id, action_by, details, created_at) VALUES ('CHANGE_CREDENTIALS', :cert_id, :by, :details, :c)");
                     $logStmt->execute([
-                        ':cert_id' => $username,
+                        ':cert_id' => $new_username,
                         ':by' => 'Admin',
-                        ':details' => "Password changed for user '$username'",
+                        ':details' => "Credentials updated for '$current_username' -> '$new_username'",
                         ':c' => $now
                     ]);
 
-                    echo json_encode(["message" => "Password updated successfully"]);
+                    echo json_encode([
+                        "message" => "Credentials updated successfully",
+                        "newUsername" => $new_username
+                    ]);
                 } else {
                     http_response_code(500);
-                    echo json_encode(["error" => "Failed to update password"]);
+                    echo json_encode(["error" => "Failed to update credentials"]);
                 }
             } catch (PDOException $e) {
                 http_response_code(500);

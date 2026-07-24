@@ -82,6 +82,7 @@ export function AdminPortal() {
   const [newRole, setNewRole] = useState<'Admin' | 'Assistant'>('Assistant');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [targetUserForPass, setTargetUserForPass] = useState('');
+  const [editUsernameVal, setEditUsernameVal] = useState('');
   const [changePasswordVal, setChangePasswordVal] = useState('');
   const [confirmChangePasswordVal, setConfirmChangePasswordVal] = useState('');
   const [showChangePasswordVal, setShowChangePasswordVal] = useState(false);
@@ -177,32 +178,40 @@ export function AdminPortal() {
   const handleChangeUserPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserMgmtMessage({ text: '', isError: false });
-    if (!targetUserForPass.trim() || !changePasswordVal.trim() || !confirmChangePasswordVal.trim()) {
-      setUserMgmtMessage({ text: 'Target username, new password and confirm password are required', isError: true });
+    if (!targetUserForPass.trim()) {
+      setUserMgmtMessage({ text: 'Target user is required', isError: true });
       return;
     }
-    if (changePasswordVal !== confirmChangePasswordVal) {
+    if (changePasswordVal && changePasswordVal !== confirmChangePasswordVal) {
       setUserMgmtMessage({ text: 'Passwords do not match! Please check both password fields.', isError: true });
       return;
     }
+    const finalNewUsername = editUsernameVal.trim() || targetUserForPass;
     try {
       const res = await fetch('./api/users.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'UPDATE_PASSWORD', username: targetUserForPass, newPassword: changePasswordVal })
+        body: JSON.stringify({
+          action: 'UPDATE_USER',
+          username: targetUserForPass,
+          newUsername: finalNewUsername,
+          newPassword: changePasswordVal
+        })
       });
       const data = await res.json();
       if (res.ok) {
-        setUserMgmtMessage({ text: `Password updated for '${targetUserForPass}'!`, isError: false });
+        setUserMgmtMessage({ text: `Credentials updated for '${finalNewUsername}'!`, isError: false });
+        setTargetUserForPass('');
+        setEditUsernameVal('');
         setChangePasswordVal('');
         setConfirmChangePasswordVal('');
         fetchUsers();
         setUserMgmtTab('list');
       } else {
-        setUserMgmtMessage({ text: data.error || 'Failed to update password', isError: true });
+        setUserMgmtMessage({ text: data.error || 'Failed to update credentials', isError: true });
       }
     } catch (err) {
-      setUserMgmtMessage({ text: 'Network error. Could not update password.', isError: true });
+      setUserMgmtMessage({ text: 'Network error. Could not update credentials.', isError: true });
     }
   };
 
@@ -1474,7 +1483,7 @@ export function AdminPortal() {
                 }`}
               >
                 <KeyRound className="w-4 h-4" />
-                Change Password
+                Edit User / Password
               </button>
             </div>
 
@@ -1523,14 +1532,15 @@ export function AdminPortal() {
                                 <button
                                   onClick={() => {
                                     setTargetUserForPass(u.username);
+                                    setEditUsernameVal(u.username);
                                     setUserMgmtTab('password');
                                     setUserMgmtMessage({ text: '', isError: false });
                                   }}
                                   className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded font-medium transition-colors flex items-center gap-1"
-                                  title="Change Password"
+                                  title="Edit Credentials & Password"
                                 >
-                                  <KeyRound className="w-3 h-3" />
-                                  Pass
+                                  <Edit2 className="w-3 h-3" />
+                                  Edit
                                 </button>
                                 {u.username !== 'oseadmin' && (
                                   <button
@@ -1623,15 +1633,18 @@ export function AdminPortal() {
                 </form>
               )}
 
-              {/* Tab 3: Change Password */}
+              {/* Tab 3: Edit Credentials & Change Password */}
               {userMgmtTab === 'password' && (
                 <form onSubmit={handleChangeUserPassword} className="space-y-4 max-w-md mx-auto">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select User to Edit</label>
                     <select
                       value={targetUserForPass}
-                      onChange={(e) => setTargetUserForPass(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      onChange={(e) => {
+                        setTargetUserForPass(e.target.value);
+                        setEditUsernameVal(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
                       required
                     >
                       <option value="">-- Choose User --</option>
@@ -1644,15 +1657,26 @@ export function AdminPortal() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Username (Edit to change)</label>
+                    <input
+                      type="text"
+                      value={editUsernameVal}
+                      onChange={(e) => setEditUsernameVal(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
+                      placeholder="Current or new username"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password <span className="text-gray-400 font-normal italic text-xs">(Leave blank to keep current)</span></label>
                     <div className="relative">
                       <input
                         type={showChangePasswordVal ? 'text' : 'password'}
                         value={changePasswordVal}
                         onChange={(e) => setChangePasswordVal(e.target.value)}
                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Enter new password"
-                        required
+                        placeholder="Enter new password (optional)"
                       />
                       <button
                         type="button"

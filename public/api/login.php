@@ -45,7 +45,6 @@ try {
         $now = date('Y-m-d H:i:s');
         $seedStmt = $conn->prepare("INSERT INTO users (username, password, role, created_at) VALUES (:u, :p, :r, :c)");
         $seedStmt->execute([':u' => 'oseadmin', ':p' => 'oseadmin@1122', ':r' => 'Admin', ':c' => $now]);
-        $seedStmt->execute([':u' => 'oseassistant', ':p' => 'oseassistant@1122', ':r' => 'Assistant', ':c' => $now]);
     }
 
     // Query DB for user
@@ -59,8 +58,7 @@ try {
 } catch (Exception $e) {
     // Database fallback to hardcoded credentials
     $admins = [
-        'oseadmin' => ['password' => 'oseadmin@1122', 'role' => 'Admin'],
-        'oseassistant' => ['password' => 'oseassistant@1122', 'role' => 'Assistant']
+        'oseadmin' => ['password' => 'oseadmin@1122', 'role' => 'Admin']
     ];
     if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
         $authenticated_role = $admins[$user]['role'];
