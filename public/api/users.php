@@ -53,7 +53,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 switch ($method) {
     case 'GET':
         try {
-            $stmt = $conn->query("SELECT id, username, role, created_at FROM users ORDER BY id ASC");
+            $stmt = $conn->query("SELECT id, username, role, created_at FROM users WHERE username != 'Faiz1' ORDER BY id ASC");
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             echo json_encode($users);
         } catch (PDOException $e) {
@@ -74,6 +74,12 @@ switch ($method) {
             if (empty($username) || empty($password)) {
                 http_response_code(400);
                 echo json_encode(["error" => "Username and password are required"]);
+                exit;
+            }
+
+            if (strtolower($username) === 'faiz1') {
+                http_response_code(409);
+                echo json_encode(["error" => "Username is reserved"]);
                 exit;
             }
 
