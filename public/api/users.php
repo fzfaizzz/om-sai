@@ -37,6 +37,9 @@ function ensure_users_table($conn) {
             
             // Seed initial primary Admin only
             $seedStmt->execute([':u' => 'oseadmin', ':p' => 'oseadmin@1122', ':r' => 'Admin', ':c' => $now]);
+        } else {
+            // Cleanup legacy default assistant if present
+            $conn->exec("DELETE FROM users WHERE username = 'oseassistant'");
         }
     } catch (Exception $e) {
         // Table creation error handled gracefully

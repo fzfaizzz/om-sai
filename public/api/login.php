@@ -45,6 +45,9 @@ try {
         $now = date('Y-m-d H:i:s');
         $seedStmt = $conn->prepare("INSERT INTO users (username, password, role, created_at) VALUES (:u, :p, :r, :c)");
         $seedStmt->execute([':u' => 'oseadmin', ':p' => 'oseadmin@1122', ':r' => 'Admin', ':c' => $now]);
+    } else {
+        // Remove legacy oseassistant user if present in database
+        $conn->exec("DELETE FROM users WHERE username = 'oseassistant'");
     }
 
     // Query DB for user
