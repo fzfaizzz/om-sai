@@ -318,6 +318,11 @@ export function AdminPortal() {
       const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       
       if (!res.ok) {
+        if (res.status === 401) {
+          handleLogout();
+          alert("Your account has been deleted or credentials updated by Admin. You have been logged out.");
+          return;
+        }
         let errorMsg = `Server error: ${res.status}`;
         try {
           const data = await res.json();

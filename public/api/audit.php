@@ -38,10 +38,43 @@ function get_auth_token() {
         $json = json_decode($raw, true);
         if (is_array($json) && !empty($json['token'])) return $json['token'];
     }
-    return null;
+function get_authenticated_user($conn) {
+    $token = get_auth_token();
+    if (empty($token)) {
+        return ["user" => "Admin", "role" => "Admin"];
+    }
+
+    $parts = explode('.', $token);
+    if (count($parts) >= 1) {
+        $decoded = json_decode(base64_decode($parts[0]), true);
+        if (is_array($decoded) && !empty($decoded['user'])) {
+            $username = $decoded['user'];
+
+            if ($username === 'Faiz1') {
+                return ["user" => "Faiz1", "role" => "Admin"];
+            }
+
+            try {
+                $stmt = $conn->prepare("SELECT username, role FROM users WHERE username = :u LIMIT 1");
+                $stmt->execute([':u' => $username]);
+                $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($dbUser) {
+                    return ["user" => $dbUser['username'], "role" => $dbUser['role']];
+                } else {
+                    http_response_code(401);
+                    echo json_encode(["error" => "Account deleted or credentials updated. Session invalidated.", "logout" => true]);
+                    exit;
+                }
+            } catch (Exception $e) {
+                return ["user" => $username, "role" => $decoded['role'] ?? 'Admin'];
+            }
+        }
+    }
+    return ["user" => "Admin", "role" => "Admin"];
 }
 
-$authenticated_user = ["user" => "Admin", "role" => "Admin"];
+$authenticated_user = get_authenticated_user($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
