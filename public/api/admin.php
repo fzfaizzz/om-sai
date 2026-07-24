@@ -91,6 +91,12 @@ function get_authenticated_user($conn) {
 
 $authenticated_user = get_authenticated_user($conn);
 
+// Fast heartbeat check without running full certificate query
+if (isset($_GET['heartbeat'])) {
+    echo json_encode(["status" => "active", "user" => $authenticated_user['user']]);
+    exit;
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {

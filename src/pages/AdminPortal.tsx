@@ -190,12 +190,14 @@ export function AdminPortal() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`./api/users.php?t=${Date.now()}`);
+      const token = getAuthToken();
+      const res = await authFetch(`./api/users.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
         setUserList(data);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') return;
       console.error('Users fetch error', err);
     }
   };
@@ -250,10 +252,11 @@ export function AdminPortal() {
       return;
     }
     try {
-      const res = await fetch('./api/users.php', {
+      const token = getAuthToken();
+      const res = await authFetch('./api/users.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'CREATE', username: newUsername, password: newPassword, role: newRole })
+        body: JSON.stringify({ action: 'CREATE', username: newUsername, password: newPassword, role: newRole, token })
       });
       const data = await res.json();
       if (res.ok) {
@@ -266,7 +269,8 @@ export function AdminPortal() {
       } else {
         setUserMgmtMessage({ text: data.error || 'Failed to create user', isError: true });
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') return;
       setUserMgmtMessage({ text: 'Network error. Could not create user.', isError: true });
     }
   };
@@ -284,14 +288,16 @@ export function AdminPortal() {
     }
     const finalNewUsername = editUsernameVal.trim() || targetUserForPass;
     try {
-      const res = await fetch('./api/users.php', {
+      const token = getAuthToken();
+      const res = await authFetch('./api/users.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'UPDATE_USER',
           username: targetUserForPass,
           newUsername: finalNewUsername,
-          newPassword: changePasswordVal
+          newPassword: changePasswordVal,
+          token
         })
       });
       const data = await res.json();
@@ -306,7 +312,8 @@ export function AdminPortal() {
       } else {
         setUserMgmtMessage({ text: data.error || 'Failed to update credentials', isError: true });
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') return;
       setUserMgmtMessage({ text: 'Network error. Could not update credentials.', isError: true });
     }
   };
@@ -318,10 +325,11 @@ export function AdminPortal() {
     }
     if (window.confirm(`Are you sure you want to delete user '${usernameToDelete}'?`)) {
       try {
-        const res = await fetch('./api/users.php', {
+        const token = getAuthToken();
+        const res = await authFetch('./api/users.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'DELETE', id, username: usernameToDelete })
+          body: JSON.stringify({ action: 'DELETE', id, username: usernameToDelete, token })
         });
         const data = await res.json();
         if (res.ok) {
@@ -329,7 +337,8 @@ export function AdminPortal() {
         } else {
           alert(`Delete Failed: ${data.error || 'Unknown error'}`);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.message === 'SESSION_EXPIRED') return;
         alert('Network error. Failed to delete user.');
       }
     }
@@ -443,6 +452,7 @@ export function AdminPortal() {
     sessionStorage.removeItem('adminAuth');
     sessionStorage.removeItem('adminRole');
     sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminUser');
     setUsername('');
     setPassword('');
   };
