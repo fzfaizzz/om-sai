@@ -49,6 +49,8 @@ function get_auth_token() {
         }
     }
     return null;
+}
+
 function get_authenticated_user($conn) {
     $token = get_auth_token();
     if (empty($token)) {

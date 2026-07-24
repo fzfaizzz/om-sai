@@ -100,6 +100,56 @@ export function AdminPortal() {
 
   const getAuthToken = () => sessionStorage.getItem('adminToken') || '';
 
+  // ── Global 401 Handler: Force logout if user was deleted/modified ──
+  const forceLogoutRef = useRef(false);
+  const forceLogout = (msg?: string) => {
+    if (forceLogoutRef.current) return; // prevent double-alerts
+    forceLogoutRef.current = true;
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('adminAuth');
+    sessionStorage.removeItem('adminRole');
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminUser');
+    setUsername('');
+    setPassword('');
+    alert(msg || 'Your account has been deleted or credentials changed by Admin. You have been logged out.');
+    forceLogoutRef.current = false;
+  };
+
+  // Wrapper: checks every API response for 401 → instant logout
+  const authFetch = async (url: string, options?: RequestInit): Promise<Response> => {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      try {
+        const clone = res.clone();
+        const data = await clone.json();
+        if (data.logout) {
+          forceLogout(data.error || undefined);
+        }
+      } catch (_) {
+        forceLogout();
+      }
+      throw new Error('SESSION_EXPIRED');
+    }
+    return res;
+  };
+
+  // ── Heartbeat: Check session validity every 30 seconds ──
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const interval = setInterval(async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+        const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}&heartbeat=1`);
+        if (res.status === 401) {
+          forceLogout();
+        }
+      } catch (_) { /* network errors ignored for heartbeat */ }
+    }, 30000); // every 30 seconds
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const handleScroll = () => {
       if (!tableRef.current || !theadRef.current) return;
@@ -129,10 +179,11 @@ export function AdminPortal() {
   const fetchAuditLogs = async () => {
     try {
       const token = getAuthToken();
-      const res = await fetch(`./api/audit.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
+      const res = await authFetch(`./api/audit.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (res.ok) setAuditLogs(data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') return;
       console.error('Audit fetch error', err);
     }
   };
@@ -315,14 +366,9 @@ export function AdminPortal() {
   const fetchCertificates = async () => {
     try {
       const token = getAuthToken();
-      const res = await fetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
+      const res = await authFetch(`./api/admin.php?t=${Date.now()}&token=${encodeURIComponent(token)}`);
       
       if (!res.ok) {
-        if (res.status === 401) {
-          handleLogout();
-          alert("Your account has been deleted or credentials updated by Admin. You have been logged out.");
-          return;
-        }
         let errorMsg = `Server error: ${res.status}`;
         try {
           const data = await res.json();
@@ -346,7 +392,8 @@ export function AdminPortal() {
         console.error('API Error: Data is not an array', data);
         setCertificates([]);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') return;
       console.error('Network Error:', err);
       setCertificates([]);
       if (isAuthenticated) alert('Network Error: Could not connect to API');
@@ -404,7 +451,7 @@ export function AdminPortal() {
     if (window.confirm('Are you sure you want to delete this certificate?')) {
       try {
         const token = getAuthToken();
-        const res = await fetch('./api/admin.php', {
+        const res = await authFetch('./api/admin.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'DELETE', id, token })
@@ -428,7 +475,8 @@ export function AdminPortal() {
 
           alert(`Delete Failed: ${errorMsg}`);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.message === 'SESSION_EXPIRED') return;
         const msg = err instanceof Error ? err.message : String(err);
         console.error('API delete failed', msg);
         alert(`Network error. Delete failed: ${msg}`);
@@ -540,7 +588,7 @@ export function AdminPortal() {
         formDataToSend.append('issuedBy', adminRole);
       }
 
-      const res = await fetch('./api/admin.php', {
+      const res = await authFetch('./api/admin.php', {
         method: 'POST',
         body: formDataToSend
       });
@@ -565,7 +613,8 @@ export function AdminPortal() {
         }
         alert(`Error: ${errorMsg}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') { setIsSaving(false); return; }
       const msg = err instanceof Error ? err.message : String(err);
       console.error('API save failed:', msg);
       alert(`Save Failed: ${msg}`);

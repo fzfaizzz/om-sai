@@ -38,6 +38,9 @@ function get_auth_token() {
         $json = json_decode($raw, true);
         if (is_array($json) && !empty($json['token'])) return $json['token'];
     }
+    return null;
+}
+
 function get_authenticated_user($conn) {
     $token = get_auth_token();
     if (empty($token)) {
