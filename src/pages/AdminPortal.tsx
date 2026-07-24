@@ -861,37 +861,37 @@ export function AdminPortal() {
                 className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e31e24] focus:border-transparent text-sm"
               />
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 w-full sm:w-auto">
               {adminRole === 'Admin' && (
                 <button
                   onClick={() => { fetchUsers(); setIsUserMgmtOpen(true); setUserMgmtMessage({ text: '', isError: false }); }}
-                  className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                  className="flex justify-center items-center gap-1.5 sm:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
                   title="User & Password Management"
                 >
-                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  Manage Users
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                  <span>Manage Users</span>
                 </button>
               )}
               <button
                 onClick={() => { fetchAuditLogs(); setIsAuditModalOpen(true); }}
-                className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                className="flex justify-center items-center gap-1.5 sm:gap-2 bg-gray-600 hover:bg-gray-700 text-white px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
               >
-                <History className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Audit Logs
+                <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span>Audit Logs</span>
               </button>
               <button
                 onClick={exportToCSV}
-                className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                className="flex justify-center items-center gap-1.5 sm:gap-2 bg-green-600 hover:bg-green-700 text-white px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
               >
-                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Export CSV
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span>Export CSV</span>
               </button>
               <button
                 onClick={() => openModal()}
-                className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-[#e31e24] hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                className="flex justify-center items-center gap-1.5 sm:gap-2 bg-[#e31e24] hover:bg-red-700 text-white px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
               >
-                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Add Certificate
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span>Add Certificate</span>
               </button>
             </div>
           </div>
