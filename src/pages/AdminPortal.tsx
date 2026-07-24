@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Certificate } from '../types';
-import { ShieldCheck, LogOut, Plus, Edit2, Trash2, X, Search, Download, Users, FileText, ChevronLeft, ChevronRight, History, FileUp, FileDown, Eye } from 'lucide-react';
+import { ShieldCheck, LogOut, Plus, Edit2, Trash2, X, Search, Download, Users, FileText, ChevronLeft, ChevronRight, History, FileUp, FileDown, Eye, EyeOff, UserPlus, KeyRound, UserCheck, UserX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
@@ -43,6 +43,7 @@ export function AdminPortal() {
   const [dashboardFilter, setDashboardFilter] = useState<'all' | 'active' | 'expired' | 'formA' | 'formB' | 'formC'>('all');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
 
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -70,6 +71,19 @@ export function AdminPortal() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditStartDate, setAuditStartDate] = useState('');
   const [auditEndDate, setAuditEndDate] = useState('');
+
+  // User Management state (Admin only)
+  const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+  const [userList, setUserList] = useState<any[]>([]);
+  const [userMgmtTab, setUserMgmtTab] = useState<'list' | 'add' | 'password'>('list');
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState<'Admin' | 'Assistant'>('Assistant');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [targetUserForPass, setTargetUserForPass] = useState('');
+  const [changePasswordVal, setChangePasswordVal] = useState('');
+  const [showChangePasswordVal, setShowChangePasswordVal] = useState(false);
+  const [userMgmtMessage, setUserMgmtMessage] = useState({ text: '', isError: false });
 
   const tableRef = useRef<HTMLTableElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
@@ -110,6 +124,97 @@ export function AdminPortal() {
       if (res.ok) setAuditLogs(data);
     } catch (err) {
       console.error('Audit fetch error', err);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`./api/users.php?t=${Date.now()}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setUserList(data);
+      }
+    } catch (err) {
+      console.error('Users fetch error', err);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserMgmtMessage({ text: '', isError: false });
+    if (!newUsername.trim() || !newPassword.trim()) {
+      setUserMgmtMessage({ text: 'Username and password are required', isError: true });
+      return;
+    }
+    try {
+      const res = await fetch('./api/users.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CREATE', username: newUsername, password: newPassword, role: newRole })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUserMgmtMessage({ text: `User '${newUsername}' created successfully!`, isError: false });
+        setNewUsername('');
+        setNewPassword('');
+        fetchUsers();
+        setUserMgmtTab('list');
+      } else {
+        setUserMgmtMessage({ text: data.error || 'Failed to create user', isError: true });
+      }
+    } catch (err) {
+      setUserMgmtMessage({ text: 'Network error. Could not create user.', isError: true });
+    }
+  };
+
+  const handleChangeUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserMgmtMessage({ text: '', isError: false });
+    if (!targetUserForPass.trim() || !changePasswordVal.trim()) {
+      setUserMgmtMessage({ text: 'Target username and new password are required', isError: true });
+      return;
+    }
+    try {
+      const res = await fetch('./api/users.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_PASSWORD', username: targetUserForPass, newPassword: changePasswordVal })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUserMgmtMessage({ text: `Password updated for '${targetUserForPass}'!`, isError: false });
+        setChangePasswordVal('');
+        fetchUsers();
+        setUserMgmtTab('list');
+      } else {
+        setUserMgmtMessage({ text: data.error || 'Failed to update password', isError: true });
+      }
+    } catch (err) {
+      setUserMgmtMessage({ text: 'Network error. Could not update password.', isError: true });
+    }
+  };
+
+  const handleDeleteUser = async (id: number, usernameToDelete: string) => {
+    if (usernameToDelete === 'oseadmin') {
+      alert("Primary Admin 'oseadmin' cannot be deleted.");
+      return;
+    }
+    if (window.confirm(`Are you sure you want to delete user '${usernameToDelete}'?`)) {
+      try {
+        const res = await fetch('./api/users.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'DELETE', id, username: usernameToDelete })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          fetchUsers();
+        } else {
+          alert(`Delete Failed: ${data.error || 'Unknown error'}`);
+        }
+      } catch (err) {
+        alert('Network error. Failed to delete user.');
+      }
     }
   };
 
@@ -504,13 +609,23 @@ export function AdminPortal() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e31e24] focus:border-transparent"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e31e24] focus:border-transparent"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+                    title={showLoginPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
               {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
               <button
@@ -615,6 +730,16 @@ export function AdminPortal() {
               />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
+              {adminRole === 'Admin' && (
+                <button
+                  onClick={() => { fetchUsers(); setIsUserMgmtOpen(true); setUserMgmtMessage({ text: '', isError: false }); }}
+                  className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                  title="User & Password Management"
+                >
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  Manage Users
+                </button>
+              )}
               <button
                 onClick={() => { fetchAuditLogs(); setIsAuditModalOpen(true); }}
                 className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
@@ -1281,6 +1406,255 @@ export function AdminPortal() {
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 Close Repository
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User & Password Management Modal (Admin Only) */}
+      {isUserMgmtOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-indigo-50/50">
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg font-bold text-gray-900">User & Password Management</h3>
+              </div>
+              <button
+                onClick={() => { setIsUserMgmtOpen(false); setUserMgmtMessage({ text: '', isError: false }); }}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-gray-200 bg-gray-50 px-6">
+              <button
+                onClick={() => { setUserMgmtTab('list'); setUserMgmtMessage({ text: '', isError: false }); }}
+                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                  userMgmtTab === 'list'
+                    ? 'border-indigo-600 text-indigo-600 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                All Users ({userList.length})
+              </button>
+              <button
+                onClick={() => { setUserMgmtTab('add'); setUserMgmtMessage({ text: '', isError: false }); }}
+                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                  userMgmtTab === 'add'
+                    ? 'border-indigo-600 text-indigo-600 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <UserPlus className="w-4 h-4" />
+                Create New User
+              </button>
+              <button
+                onClick={() => { setUserMgmtTab('password'); setUserMgmtMessage({ text: '', isError: false }); }}
+                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                  userMgmtTab === 'password'
+                    ? 'border-indigo-600 text-indigo-600 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <KeyRound className="w-4 h-4" />
+                Change Password
+              </button>
+            </div>
+
+            {/* Notification message */}
+            {userMgmtMessage.text && (
+              <div className={`px-6 py-2 text-xs font-medium ${userMgmtMessage.isError ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-green-50 text-green-700 border-b border-green-100'}`}>
+                {userMgmtMessage.text}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Tab 1: User List */}
+              {userMgmtTab === 'list' && (
+                <div className="space-y-3">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2.5">Username</th>
+                        <th className="px-4 py-2.5">Role</th>
+                        <th className="px-4 py-2.5">Created On</th>
+                        <th className="px-4 py-2.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {userList.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">No users found.</td>
+                        </tr>
+                      ) : (
+                        userList.map((u) => (
+                          <tr key={u.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-semibold text-gray-900 flex items-center gap-2">
+                              <UserCheck className="w-4 h-4 text-indigo-600" />
+                              {u.username}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                u.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 text-xs">{formatFullDate(u.created_at)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setTargetUserForPass(u.username);
+                                    setUserMgmtTab('password');
+                                    setUserMgmtMessage({ text: '', isError: false });
+                                  }}
+                                  className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded font-medium transition-colors flex items-center gap-1"
+                                  title="Change Password"
+                                >
+                                  <KeyRound className="w-3 h-3" />
+                                  Pass
+                                </button>
+                                {u.username !== 'oseadmin' && (
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.username)}
+                                    className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                    title="Delete User"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Tab 2: Create User */}
+              {userMgmtTab === 'add' && (
+                <form onSubmit={handleCreateUser} className="space-y-4 max-w-md mx-auto">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Username</label>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      placeholder="e.g. manager1"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="Enter secure password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as 'Admin' | 'Assistant')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                    >
+                      <option value="Assistant">Assistant (Standard Access)</option>
+                      <option value="Admin">Admin (Full Control)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Create User Account
+                  </button>
+                </form>
+              )}
+
+              {/* Tab 3: Change Password */}
+              {userMgmtTab === 'password' && (
+                <form onSubmit={handleChangeUserPassword} className="space-y-4 max-w-md mx-auto">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+                    <select
+                      value={targetUserForPass}
+                      onChange={(e) => setTargetUserForPass(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      required
+                    >
+                      <option value="">-- Choose User --</option>
+                      {userList.map((u) => (
+                        <option key={u.id} value={u.username}>
+                          {u.username} ({u.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showChangePasswordVal ? 'text' : 'password'}
+                        value={changePasswordVal}
+                        onChange={(e) => setChangePasswordVal(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="Enter new password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowChangePasswordVal(!showChangePasswordVal)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                      >
+                        {showChangePasswordVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    Update Password
+                  </button>
+                </form>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-100 flex justify-end bg-gray-50">
+              <button
+                onClick={() => { setIsUserMgmtOpen(false); setUserMgmtMessage({ text: '', isError: false }); }}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

@@ -11,6 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+require_once 'db.php';
+
 $data = json_decode(file_get_contents("php://input"));
 
 if (!isset($data->username) || !isset($data->password)) {
@@ -19,28 +21,57 @@ if (!isset($data->username) || !isset($data->password)) {
     exit;
 }
 
-// HARDCODED SECURE ADMIN CREDENTIALS
-$admins = [
-    'oseadmin' => [
-        'password' => 'oseadmin@1122',
-        'role' => 'Admin'
-    ],
-    'oseassistant' => [
-        'password' => 'oseassistant@1122',
-        'role' => 'Assistant'
-    ]
-];
-
 $user = trim($data->username);
 $pass = trim($data->password);
 
 $secret_key = "OmSai#AuthSecret@2026!SecureKey";
+$authenticated_role = null;
 
-if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
+// Ensure users table exists and seed if empty
+try {
+    $tableQuery = "CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'Assistant',
+        created_at DATETIME NOT NULL
+    )";
+    $conn->exec($tableQuery);
+
+    $checkStmt = $conn->query("SELECT COUNT(*) as count FROM users");
+    $rowCount = $checkStmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+    if ($rowCount == 0) {
+        $now = date('Y-m-d H:i:s');
+        $seedStmt = $conn->prepare("INSERT INTO users (username, password, role, created_at) VALUES (:u, :p, :r, :c)");
+        $seedStmt->execute([':u' => 'oseadmin', ':p' => 'oseadmin@1122', ':r' => 'Admin', ':c' => $now]);
+        $seedStmt->execute([':u' => 'oseassistant', ':p' => 'oseassistant@1122', ':r' => 'Assistant', ':c' => $now]);
+    }
+
+    // Query DB for user
+    $userStmt = $conn->prepare("SELECT username, password, role FROM users WHERE username = :u LIMIT 1");
+    $userStmt->execute([':u' => $user]);
+    $dbUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($dbUser && $dbUser['password'] === $pass) {
+        $authenticated_role = $dbUser['role'];
+    }
+} catch (Exception $e) {
+    // Database fallback to hardcoded credentials
+    $admins = [
+        'oseadmin' => ['password' => 'oseadmin@1122', 'role' => 'Admin'],
+        'oseassistant' => ['password' => 'oseassistant@1122', 'role' => 'Assistant']
+    ];
+    if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
+        $authenticated_role = $admins[$user]['role'];
+    }
+}
+
+if ($authenticated_role !== null) {
     $payload = [
         "user" => $user,
-        "role" => $admins[$user]['role'],
-        "exp" => time() + (365 * 24 * 3600) // 1 Year Token Validity (Never expires automatically)
+        "role" => $authenticated_role,
+        "exp" => time() + (365 * 24 * 3600) // 1 Year Token Validity
     ];
     $encoded_payload = base64_encode(json_encode($payload));
     $signature = hash_hmac('sha256', $encoded_payload, $secret_key);
@@ -49,7 +80,7 @@ if (isset($admins[$user]) && $admins[$user]['password'] === $pass) {
     http_response_code(200);
     echo json_encode([
         "status" => "success",
-        "role" => $admins[$user]['role'],
+        "role" => $authenticated_role,
         "token" => $token
     ]);
 } else {
