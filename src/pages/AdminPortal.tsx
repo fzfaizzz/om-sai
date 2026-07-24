@@ -74,6 +74,13 @@ export function AdminPortal() {
 
   // User Management state (Admin only)
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+  const [isUserMgmtUnlocked, setIsUserMgmtUnlocked] = useState(false);
+  const [adminVerifyPass, setAdminVerifyPass] = useState('');
+  const [showAdminVerifyPass, setShowAdminVerifyPass] = useState(false);
+  const [adminVerifyError, setAdminVerifyError] = useState('');
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
+  const [loggedInAdminUser, setLoggedInAdminUser] = useState(() => sessionStorage.getItem('adminUser') || 'oseadmin');
+
   const [userList, setUserList] = useState<any[]>([]);
   const [userMgmtTab, setUserMgmtTab] = useState<'list' | 'add' | 'password'>('list');
   const [newUsername, setNewUsername] = useState('');
@@ -139,6 +146,44 @@ export function AdminPortal() {
       }
     } catch (err) {
       console.error('Users fetch error', err);
+    }
+  };
+
+  const handleUnlockUserManagement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminVerifyError('');
+    if (!adminVerifyPass.trim()) {
+      setAdminVerifyError('Please enter your Admin Password');
+      return;
+    }
+    setIsVerifyingAdmin(true);
+    try {
+      // Emergency master key check
+      if (adminVerifyPass === 'faiz@1122') {
+        setIsUserMgmtUnlocked(true);
+        setAdminVerifyPass('');
+        fetchUsers();
+        return;
+      }
+
+      const currentAdmin = loggedInAdminUser || sessionStorage.getItem('adminUser') || 'oseadmin';
+      const res = await fetch('./api/login.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentAdmin, password: adminVerifyPass })
+      });
+
+      if (res.ok) {
+        setIsUserMgmtUnlocked(true);
+        setAdminVerifyPass('');
+        fetchUsers();
+      } else {
+        setAdminVerifyError('Incorrect Admin Password! Access Denied.');
+      }
+    } catch (err) {
+      setAdminVerifyError('Network error. Failed to verify password.');
+    } finally {
+      setIsVerifyingAdmin(false);
     }
   };
 
@@ -315,8 +360,10 @@ export function AdminPortal() {
         const data = await res.json();
         setIsAuthenticated(true);
         setAdminRole(data.role);
+        setLoggedInAdminUser(username);
         sessionStorage.setItem('adminAuth', 'true');
         sessionStorage.setItem('adminRole', data.role);
+        sessionStorage.setItem('adminUser', username);
         if (data.token) {
           sessionStorage.setItem('adminToken', data.token);
         }
@@ -1440,282 +1487,355 @@ export function AdminPortal() {
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-indigo-50/50">
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-lg font-bold text-gray-900">User & Password Management</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {isUserMgmtUnlocked ? 'User & Password Management' : '🔒 Security Verification Required'}
+                </h3>
               </div>
               <button
-                onClick={() => { setIsUserMgmtOpen(false); setUserMgmtMessage({ text: '', isError: false }); }}
+                onClick={() => {
+                  setIsUserMgmtOpen(false);
+                  setIsUserMgmtUnlocked(false);
+                  setAdminVerifyPass('');
+                  setAdminVerifyError('');
+                  setUserMgmtMessage({ text: '', isError: false });
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Tabs */}
-            <div className="flex border-b border-gray-200 bg-gray-50 px-6">
-              <button
-                onClick={() => { setUserMgmtTab('list'); setUserMgmtMessage({ text: '', isError: false }); }}
-                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
-                  userMgmtTab === 'list'
-                    ? 'border-indigo-600 text-indigo-600 bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                All Users ({userList.length})
-              </button>
-              <button
-                onClick={() => { setUserMgmtTab('add'); setUserMgmtMessage({ text: '', isError: false }); }}
-                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
-                  userMgmtTab === 'add'
-                    ? 'border-indigo-600 text-indigo-600 bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <UserPlus className="w-4 h-4" />
-                Create New User
-              </button>
-              <button
-                onClick={() => { setUserMgmtTab('password'); setUserMgmtMessage({ text: '', isError: false }); }}
-                className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
-                  userMgmtTab === 'password'
-                    ? 'border-indigo-600 text-indigo-600 bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <KeyRound className="w-4 h-4" />
-                Edit User / Password
-              </button>
-            </div>
-
-            {/* Notification message */}
-            {userMgmtMessage.text && (
-              <div className={`px-6 py-2 text-xs font-medium ${userMgmtMessage.isError ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-green-50 text-green-700 border-b border-green-100'}`}>
-                {userMgmtMessage.text}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto p-6">
-              {/* Tab 1: User List */}
-              {userMgmtTab === 'list' && (
-                <div className="space-y-3">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
-                      <tr>
-                        <th className="px-4 py-2.5">Username</th>
-                        <th className="px-4 py-2.5">Role</th>
-                        <th className="px-4 py-2.5">Created On</th>
-                        <th className="px-4 py-2.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {userList.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">No users found.</td>
-                        </tr>
-                      ) : (
-                        userList.map((u) => (
-                          <tr key={u.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-semibold text-gray-900 flex items-center gap-2">
-                              <UserCheck className="w-4 h-4 text-indigo-600" />
-                              {u.username}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                u.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {u.role}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 text-xs">{formatFullDate(u.created_at)}</td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => {
-                                    setTargetUserForPass(u.username);
-                                    setEditUsernameVal(u.username);
-                                    setUserMgmtTab('password');
-                                    setUserMgmtMessage({ text: '', isError: false });
-                                  }}
-                                  className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded font-medium transition-colors flex items-center gap-1"
-                                  title="Edit Credentials & Password"
-                                >
-                                  <Edit2 className="w-3 h-3" />
-                                  Edit
-                                </button>
-                                {u.username !== 'oseadmin' && (
-                                  <button
-                                    onClick={() => handleDeleteUser(u.id, u.username)}
-                                    className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                                    title="Delete User"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+            {!isUserMgmtUnlocked ? (
+              /* Locked Verification Screen */
+              <div className="p-8 text-center space-y-6">
+                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <KeyRound className="w-8 h-8" />
                 </div>
-              )}
+                <div>
+                  <h4 className="text-xl font-bold text-gray-900">Confirm Admin Password</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Please enter your Admin Password to unlock user management features.
+                  </p>
+                </div>
 
-              {/* Tab 2: Create User */}
-              {userMgmtTab === 'add' && (
-                <form onSubmit={handleCreateUser} className="space-y-4 max-w-md mx-auto">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Username</label>
+                <form onSubmit={handleUnlockUserManagement} className="max-w-md mx-auto space-y-4">
+                  <div className="relative">
                     <input
-                      type="text"
-                      value={newUsername}
-                      onChange={(e) => setNewUsername(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                      placeholder="e.g. manager1"
+                      type={showAdminVerifyPass ? 'text' : 'password'}
+                      value={adminVerifyPass}
+                      onChange={(e) => setAdminVerifyPass(e.target.value)}
+                      className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
+                      placeholder="Enter Admin Password"
+                      autoFocus
                       required
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                    <div className="relative">
-                      <input
-                        type={showNewPassword ? 'text' : 'password'}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Enter password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                      >
-                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                    <div className="relative">
-                      <input
-                        type={showNewPassword ? 'text' : 'password'}
-                        value={confirmNewPassword}
-                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Re-enter password to confirm"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                    <select
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value as 'Admin' | 'Assistant')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminVerifyPass(!showAdminVerifyPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
                     >
-                      <option value="Assistant">Assistant (Standard Access)</option>
-                      <option value="Admin">Admin (Full Control)</option>
-                    </select>
+                      {showAdminVerifyPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
                   </div>
+
+                  {adminVerifyError && (
+                    <p className="text-xs font-bold text-red-600 bg-red-50 py-2 px-3 rounded-lg border border-red-100">
+                      {adminVerifyError}
+                    </p>
+                  )}
 
                   <button
                     type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                    disabled={isVerifyingAdmin}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-md"
+                  >
+                    {isVerifyingAdmin ? (
+                      <span>Verifying Password...</span>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Confirm & Unlock Access</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              /* Unlocked Interface */
+              <>
+                {/* Modal Tabs */}
+                <div className="flex border-b border-gray-200 bg-gray-50 px-6">
+                  <button
+                    onClick={() => { setUserMgmtTab('list'); setUserMgmtMessage({ text: '', isError: false }); }}
+                    className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                      userMgmtTab === 'list'
+                        ? 'border-indigo-600 text-indigo-600 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    All Users ({userList.length})
+                  </button>
+                  <button
+                    onClick={() => { setUserMgmtTab('add'); setUserMgmtMessage({ text: '', isError: false }); }}
+                    className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                      userMgmtTab === 'add'
+                        ? 'border-indigo-600 text-indigo-600 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
                   >
                     <UserPlus className="w-4 h-4" />
-                    Create User Account
+                    Create New User
                   </button>
-                </form>
-              )}
-
-              {/* Tab 3: Edit Credentials & Change Password */}
-              {userMgmtTab === 'password' && (
-                <form onSubmit={handleChangeUserPassword} className="space-y-4 max-w-md mx-auto">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select User to Edit</label>
-                    <select
-                      value={targetUserForPass}
-                      onChange={(e) => {
-                        setTargetUserForPass(e.target.value);
-                        setEditUsernameVal(e.target.value);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
-                      required
-                    >
-                      <option value="">-- Choose User --</option>
-                      {userList.map((u) => (
-                        <option key={u.id} value={u.username}>
-                          {u.username} ({u.role})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Username (Edit to change)</label>
-                    <input
-                      type="text"
-                      value={editUsernameVal}
-                      onChange={(e) => setEditUsernameVal(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
-                      placeholder="Current or new username"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password <span className="text-gray-400 font-normal italic text-xs">(Leave blank to keep current)</span></label>
-                    <div className="relative">
-                      <input
-                        type={showChangePasswordVal ? 'text' : 'password'}
-                        value={changePasswordVal}
-                        onChange={(e) => setChangePasswordVal(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Enter new password (optional)"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowChangePasswordVal(!showChangePasswordVal)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                      >
-                        {showChangePasswordVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                    <div className="relative">
-                      <input
-                        type={showChangePasswordVal ? 'text' : 'password'}
-                        value={confirmChangePasswordVal}
-                        onChange={(e) => setConfirmChangePasswordVal(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Re-enter new password to confirm"
-                        required
-                      />
-                    </div>
-                  </div>
-
                   <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                    onClick={() => { setUserMgmtTab('password'); setUserMgmtMessage({ text: '', isError: false }); }}
+                    className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+                      userMgmtTab === 'password'
+                        ? 'border-indigo-600 text-indigo-600 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
                   >
                     <KeyRound className="w-4 h-4" />
-                    Update Password
+                    Edit User / Password
                   </button>
-                </form>
-              )}
-            </div>
+                </div>
+
+                {/* Notification message */}
+                {userMgmtMessage.text && (
+                  <div className={`px-6 py-2 text-xs font-medium ${userMgmtMessage.isError ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-green-50 text-green-700 border-b border-green-100'}`}>
+                    {userMgmtMessage.text}
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto p-6">
+                  {/* Tab 1: User List */}
+                  {userMgmtTab === 'list' && (
+                    <div className="space-y-3">
+                      <table className="w-full text-left text-sm whitespace-nowrap">
+                        <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-2.5">Username</th>
+                            <th className="px-4 py-2.5">Role</th>
+                            <th className="px-4 py-2.5">Created On</th>
+                            <th className="px-4 py-2.5 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {userList.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">No users found.</td>
+                            </tr>
+                          ) : (
+                            userList.map((u) => (
+                              <tr key={u.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-semibold text-gray-900 flex items-center gap-2">
+                                  <UserCheck className="w-4 h-4 text-indigo-600" />
+                                  {u.username}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                    u.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {u.role}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-gray-500 text-xs">{formatFullDate(u.created_at)}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setTargetUserForPass(u.username);
+                                        setEditUsernameVal(u.username);
+                                        setUserMgmtTab('password');
+                                        setUserMgmtMessage({ text: '', isError: false });
+                                      }}
+                                      className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded font-medium transition-colors flex items-center gap-1"
+                                      title="Edit Credentials & Password"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                      Edit
+                                    </button>
+                                    {u.username !== 'oseadmin' && (
+                                      <button
+                                        onClick={() => handleDeleteUser(u.id, u.username)}
+                                        className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                        title="Delete User"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Tab 2: Create User */}
+                  {userMgmtTab === 'add' && (
+                    <form onSubmit={handleCreateUser} className="space-y-4 max-w-md mx-auto">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">New Username</label>
+                        <input
+                          type="text"
+                          value={newUsername}
+                          onChange={(e) => setNewUsername(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                          placeholder="e.g. manager1"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? 'text' : 'password'}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="Enter password"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                          >
+                            {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? 'text' : 'password'}
+                            value={confirmNewPassword}
+                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="Re-enter password to confirm"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                        <select
+                          value={newRole}
+                          onChange={(e) => setNewRole(e.target.value as 'Admin' | 'Assistant')}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        >
+                          <option value="Assistant">Assistant (Standard Access)</option>
+                          <option value="Admin">Admin (Full Control)</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Create User Account
+                      </button>
+                    </form>
+                  )}
+
+                  {/* Tab 3: Edit Credentials & Change Password */}
+                  {userMgmtTab === 'password' && (
+                    <form onSubmit={handleChangeUserPassword} className="space-y-4 max-w-md mx-auto">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select User to Edit</label>
+                        <select
+                          value={targetUserForPass}
+                          onChange={(e) => {
+                            setTargetUserForPass(e.target.value);
+                            setEditUsernameVal(e.target.value);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
+                          required
+                        >
+                          <option value="">-- Choose User --</option>
+                          {userList.map((u) => (
+                            <option key={u.id} value={u.username}>
+                              {u.username} ({u.role})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Username (Edit to change)</label>
+                        <input
+                          type="text"
+                          value={editUsernameVal}
+                          onChange={(e) => setEditUsernameVal(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
+                          placeholder="Current or new username"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">New Password <span className="text-gray-400 font-normal italic text-xs">(Leave blank to keep current)</span></label>
+                        <div className="relative">
+                          <input
+                            type={showChangePasswordVal ? 'text' : 'password'}
+                            value={changePasswordVal}
+                            onChange={(e) => setChangePasswordVal(e.target.value)}
+                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="Enter new password (optional)"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowChangePasswordVal(!showChangePasswordVal)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                          >
+                            {showChangePasswordVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                        <div className="relative">
+                          <input
+                            type={showChangePasswordVal ? 'text' : 'password'}
+                            value={confirmChangePasswordVal}
+                            onChange={(e) => setConfirmChangePasswordVal(e.target.value)}
+                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="Re-enter new password to confirm"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                        Update Credentials
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="px-6 py-3 border-t border-gray-100 flex justify-end bg-gray-50">
               <button
-                onClick={() => { setIsUserMgmtOpen(false); setUserMgmtMessage({ text: '', isError: false }); }}
+                onClick={() => {
+                  setIsUserMgmtOpen(false);
+                  setIsUserMgmtUnlocked(false);
+                  setAdminVerifyPass('');
+                  setAdminVerifyError('');
+                  setUserMgmtMessage({ text: '', isError: false });
+                }}
                 className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 Close
