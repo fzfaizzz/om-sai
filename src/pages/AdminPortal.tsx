@@ -78,10 +78,12 @@ export function AdminPortal() {
   const [userMgmtTab, setUserMgmtTab] = useState<'list' | 'add' | 'password'>('list');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'Admin' | 'Assistant'>('Assistant');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [targetUserForPass, setTargetUserForPass] = useState('');
   const [changePasswordVal, setChangePasswordVal] = useState('');
+  const [confirmChangePasswordVal, setConfirmChangePasswordVal] = useState('');
   const [showChangePasswordVal, setShowChangePasswordVal] = useState(false);
   const [userMgmtMessage, setUserMgmtMessage] = useState({ text: '', isError: false });
 
@@ -142,8 +144,12 @@ export function AdminPortal() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserMgmtMessage({ text: '', isError: false });
-    if (!newUsername.trim() || !newPassword.trim()) {
-      setUserMgmtMessage({ text: 'Username and password are required', isError: true });
+    if (!newUsername.trim() || !newPassword.trim() || !confirmNewPassword.trim()) {
+      setUserMgmtMessage({ text: 'All fields are required', isError: true });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setUserMgmtMessage({ text: 'Passwords do not match! Please check both password fields.', isError: true });
       return;
     }
     try {
@@ -157,6 +163,7 @@ export function AdminPortal() {
         setUserMgmtMessage({ text: `User '${newUsername}' created successfully!`, isError: false });
         setNewUsername('');
         setNewPassword('');
+        setConfirmNewPassword('');
         fetchUsers();
         setUserMgmtTab('list');
       } else {
@@ -170,8 +177,12 @@ export function AdminPortal() {
   const handleChangeUserPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserMgmtMessage({ text: '', isError: false });
-    if (!targetUserForPass.trim() || !changePasswordVal.trim()) {
-      setUserMgmtMessage({ text: 'Target username and new password are required', isError: true });
+    if (!targetUserForPass.trim() || !changePasswordVal.trim() || !confirmChangePasswordVal.trim()) {
+      setUserMgmtMessage({ text: 'Target username, new password and confirm password are required', isError: true });
+      return;
+    }
+    if (changePasswordVal !== confirmChangePasswordVal) {
+      setUserMgmtMessage({ text: 'Passwords do not match! Please check both password fields.', isError: true });
       return;
     }
     try {
@@ -184,6 +195,7 @@ export function AdminPortal() {
       if (res.ok) {
         setUserMgmtMessage({ text: `Password updated for '${targetUserForPass}'!`, isError: false });
         setChangePasswordVal('');
+        setConfirmChangePasswordVal('');
         fetchUsers();
         setUserMgmtTab('list');
       } else {
@@ -1562,7 +1574,7 @@ export function AdminPortal() {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        placeholder="Enter secure password"
+                        placeholder="Enter password"
                         required
                       />
                       <button
@@ -1572,6 +1584,20 @@ export function AdminPortal() {
                       >
                         {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="Re-enter password to confirm"
+                        required
+                      />
                     </div>
                   </div>
 
@@ -1635,6 +1661,20 @@ export function AdminPortal() {
                       >
                         {showChangePasswordVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showChangePasswordVal ? 'text' : 'password'}
+                        value={confirmChangePasswordVal}
+                        onChange={(e) => setConfirmChangePasswordVal(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        placeholder="Re-enter new password to confirm"
+                        required
+                      />
                     </div>
                   </div>
 
