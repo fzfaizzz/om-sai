@@ -1312,7 +1312,7 @@ export function AdminPortal() {
                           multiple
                           onChange={e => {
                             if (e.target.files && e.target.files.length > 0) {
-                              const allFiles = Array.from(e.target.files);
+                              const allFiles = Array.from(e.target.files as FileList);
                               const validPdfs = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
                               if (validPdfs.length === 0) {
                                 alert('Please select a valid PDF file (.pdf)');
